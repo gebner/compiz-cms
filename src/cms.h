@@ -43,8 +43,6 @@ class CmsScreen :
 
 	GLuint cmsFunction;
 	int cmsFunctionParam, cmsFunctionUnit;
-
-	bool isCms;
 	
 	bool
 	checkStateTimeout ();
@@ -52,15 +50,6 @@ class CmsScreen :
 	void
 	optionChanged (CompOption          *opt,
 		       CmsOptions::Options num);
-
-	/*bool
-	toggle (CompAction         *action,
-		CompAction::State  state,
-		CompOption::Vector opt,
-		bool		   all);
-
-	void
-	ToggleScreen ();*/
 
 	GLuint
 	getFragmentFunction (GLTexture *texture,
@@ -104,11 +93,12 @@ class CmsWindow :
 	bool isCms;
 
 	void
+	updateMatch ();
+
+	void
 	glDrawTexture(GLTexture          *texture,
 		      GLFragment::Attrib &attrib,
 		      unsigned int       mask);
-
-	//void toggle ();
 };
 
 #define CMS_SCREEN(s)							      \

@@ -30,55 +30,16 @@ using namespace GLFragment;
 
 COMPIZ_PLUGIN_20090315 (cms, CmsPluginVTable);
 
-#if 0
 void
-CmsWindow::toggle ()
+CmsWindow::updateMatch ()
 {
     CMS_SCREEN (screen);
 
-    /* toggle window cmsative flag */
-    isCms = !isCms;
+    isCms = !ns->optionGetExcludeMatch ().evaluate (window);
 
-    /* check exclude list */
-    if (ns->optionGetExcludeMatch ().evaluate (window))
-	isCms = false;
-
-    /* cause repainting */
     cWindow->addDamage ();
-
-    if (isCms)
-	gWindow->glDrawTextureSetEnabled (this, true);
-    else
-	gWindow->glDrawTextureSetEnabled (this, false);
+    gWindow->glDrawTextureSetEnabled (this, isCms);
 }
-
-bool
-CmsScreen::toggle (CompAction         *action,
-		   CompAction::State  state,
-		   CompOption::Vector options,
-		   bool		      all)
-{
-    if (all)
-    {
-	foreach (CompWindow *w, screen->windows ())
-	    CmsWindow::get (w)->toggle ();
-	/* toggle screen cmsative flag */
-	isCms = !isCms;
-    }
-    else
-    {
-	Window     xid;
-	CompWindow *w;
-
-	xid = CompOption::getIntOptionNamed (options, "window");
-	w   = screen->findWindow (xid);
-	if (w)
-	    CmsWindow::get (w)->toggle ();
-    }
-
-    return true;
-}
-#endif
 
 GLuint
 CmsScreen::getFragmentFunction (GLTexture *texture,
@@ -232,9 +193,7 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 			  GLFragment::Attrib &attrib,
 			  unsigned int       mask)
 {
-    //GLTexture::Filter filter;
     bool              doCms = false;
-    //GLTexture         *tex = NULL;
 
     CMS_SCREEN (screen);
 
@@ -257,7 +216,7 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 	    }
 	}
     }*/
-    doCms = true;
+    doCms = isCms;
 
     if (ns->lut && doCms && GL::fragmentProgram)
     {
@@ -300,69 +259,36 @@ void
 CmsScreen::optionChanged (CompOption          *opt,
 			  CmsOptions::Options num)
 {
-    return;
-    /*switch (num)
+    switch (num)
     {
-    case CmsOptions::CmsMatch:
     case CmsOptions::ExcludeMatch:
 	{
 	    foreach (CompWindow *w, screen->windows ())
 	    {
-		bool isNowCms;
 		CMS_WINDOW (w);
 
-		isNowCms = optionGetCmsMatch ().evaluate (w);
-		isNowCms = isNowCms && !optionGetExcludeMatch ().evaluate (w);
-
-		if (isNowCms && isCms && !nw->isCms)
-		    nw->toggle ();
-		else if (!isNowCms && nw->isCms)
-		    nw->toggle ();
+		nw->updateMatch ();
 	    }
 	}
 	break;
-	case CmsOptions::CmsDecorations:
-	{
-		foreach (CompWindow *w, screen->windows ())
-			if (CmsWindow::get (w)->isCms)
-				CmsWindow::get (w)->cWindow->addDamage ();
-	}
     default:
 	break;
-    }*/
+    }
 }
 
 CmsScreen::CmsScreen (CompScreen *screen) :
     PluginClassHandler <CmsScreen, CompScreen> (screen),
     CmsOptions (),
     cmsFunction (0),
-    isCms (true),
     gScreen (GLScreen::get (screen)),
     lut (0)
 {
-    /*optionSetWindowToggleKeyInitiate (boost::bind (&CmsScreen::toggle, this,
-						   _1, _2, _3,
-						   false));
-    optionSetScreenToggleKeyInitiate (boost::bind (&CmsScreen::toggle, this,
-						   _1, _2, _3,
-						   true));*/
-
-    optionSetCmsMatchNotify (boost::bind (&CmsScreen::optionChanged, this,
-					  _1, _2));
-    optionSetExcludeMatchNotify (boost::bind (&CmsScreen::optionChanged, this,
-					      _1, _2));
-	optionSetCmsDecorationsNotify (boost::bind (&CmsScreen::optionChanged, this,
-					  _1, _2));
+    optionSetExcludeMatchNotify (
+	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
 
     _ICC_PROFILE = XInternAtom(screen->dpy(), "_ICC_PROFILE", false);
 
     setupLUT();
-
-    foreach (CompWindow *w, screen->windows ()) {
-	if (w->resName() == "evince") {
-	    CmsWindow::get (w);
-	}
-    }
 }
 
 CmsScreen::~CmsScreen () {
@@ -380,11 +306,7 @@ CmsScreen::~CmsScreen () {
 void
 CmsWindow::postLoad ()
 {
-    if (isCms)
-    {
-	cWindow->addDamage ();
-	gWindow->glDrawTextureSetEnabled (this, true);
-    }
+    updateMatch ();
 }
 	
 
@@ -394,20 +316,11 @@ CmsWindow::CmsWindow (CompWindow *window) :
     window (window),
     cWindow (CompositeWindow::get (window)),
     gWindow (GLWindow::get (window)),
-    isCms (true)
+    isCms (false)
 {
-    GLWindowInterface::setHandler (gWindow, true);
+    GLWindowInterface::setHandler (gWindow, false);
 
-    //CMS_SCREEN (screen);
-
-    /* Taken from ObjectAdd, since there is no equavilent
-     * we check for screenCms == true in ctor */
-
-    /*if (ns->isCms && ns->optionGetCmsMatch ().evaluate (window))
-	toggle ();*/
-    
-    cWindow->addDamage ();
-    gWindow->glDrawTextureSetEnabled (this, true);
+    updateMatch ();
 }
 
 CmsWindow::~CmsWindow ()
