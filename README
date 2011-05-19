@@ -1,0 +1,17 @@
+A color management plugin for compiz 0.9.
+
+Dependencies are only compiz and lcms.  The ICC profile is retrieved using the
+_ICC_PROFILE atom as set by gnome-color-manager.  Compiz-style window
+exclusions are supported.
+
+This plugin is based on code from the compicc plugin by Kai-Uwe Bergmann:
+http://compicc.sf.net/
+
+To install:
+$ sudo apt-get install compiz-dev liblcms1-dev
+$ git clone https://github.com/gebner/compiz-cms.git
+$ mkdir compiz-cms/build
+$ cd compiz-cms/build
+$ cmake ..
+$ make install
+And enable in CCSM.
