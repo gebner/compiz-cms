@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<compiz>
+    <plugin name="cms" useBcop="true">
+	<_short>Color Management</_short>
+	<_long>Apply an ICC profile to all windows</_long>
+	<category>Color</category>
+	<deps>
+	    <requirement>
+		<plugin>opengl</plugin>
+	    </requirement>
+	    <relation type="after">
+		<plugin>composite</plugin>
+		<plugin>opengl</plugin>
+		<plugin>blur</plugin>
+		<plugin>decor</plugin>
+	    </relation>
+	</deps>
+	<options>
+	    <option name="window_toggle_key" type="key">
+		<_short>Toggle Window CMS</_short>
+		<_long>Toggle active window CMS</_long>
+		<default>&lt;Super&gt;n</default>
+	    </option>
+	    <option name="screen_toggle_key" type="key">
+		<_short>Toggle Screen CMS</_short>
+		<_long>Toggle screen CMS</_long>
+		<default>&lt;Super&gt;m</default>
+	    </option>
+	    <option name="cms_match" type="match">
+		<_short>CMS Windows</_short>
+		<_long>Windows to be color managed by default</_long>
+		<default>any</default>
+	    </option>
+	    <option name="exclude_match" type="match">
+		<_short>Exclude Windows</_short>
+		<_long>Windows to exclude from color management</_long>
+		<default>none</default>
+	    </option>
+	    <option name="cms_decorations" type="bool">
+		<_short>Window Decorations</_short>
+		<_long>Also color manage window decorations, not only the window contents.</_long>
+		<default>true</default>
+	    </option>
+	</options>
+    </plugin>
+</compiz>
