@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2006 Darryll Truchan <moppsy@comcast.net>
+ *	     (C) 2011 Gabriel Ebner <gebner@2b7e.org>
  *
  * Pixel shader cmsating by Dennis Kasprzyk <onestone@beryl-project.org>
  * Usage of matches by Danny Baumann <maniac@beryl-project.org>
