@@ -39,7 +39,6 @@ CmsWindow::updateMatch ()
     isCms = !ns->optionGetExcludeMatch ().evaluate (window);
 
     cWindow->addDamage ();
-    gWindow->glDrawTextureSetEnabled (this, isCms);
 }
 
 GLuint
@@ -194,30 +193,19 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 			  GLFragment::Attrib &attrib,
 			  unsigned int       mask)
 {
-    bool              doCms = false;
-
     CMS_SCREEN (screen);
 
-    /*if (isCms)
+    bool isDecoration = true;
+    foreach (GLTexture *tex, gWindow->textures ())
     {
-	if (ns->optionGetCmsDecorations ())
+	if (texture == tex)
 	{
-	    doCms = true;
-	    tex   = texture;
+	    isDecoration = false;
+	    break;
 	}
-	else
-	{
-	    doCms = false;
-	    for (unsigned int i = 0; i < gWindow->textures ().size (); i++)
-	    {
-		tex = gWindow->textures ()[i];
-		doCms = (texture->name () == tex->name ());
-		if (doCms)
-		    break;
-	    }
-	}
-    }*/
-    doCms = isCms;
+    }
+
+    bool doCms = isDecoration ? ns->optionGetDecorations () : isCms;
 
     if (ns->lut && doCms && GL::fragmentProgram)
     {
@@ -262,6 +250,7 @@ CmsScreen::optionChanged (CompOption          *opt,
 {
     switch (num)
     {
+    case CmsOptions::Decorations:
     case CmsOptions::ExcludeMatch:
 	{
 	    foreach (CompWindow *w, screen->windows ())
@@ -285,6 +274,8 @@ CmsScreen::CmsScreen (CompScreen *screen) :
     lut (0)
 {
     optionSetExcludeMatchNotify (
+	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
+    optionSetDecorationsNotify (
 	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
 
     _ICC_PROFILE = XInternAtom(screen->dpy(), "_ICC_PROFILE", false);
@@ -318,7 +309,7 @@ CmsWindow::CmsWindow (CompWindow *window) :
     gWindow (GLWindow::get (window)),
     isCms (false)
 {
-    GLWindowInterface::setHandler (gWindow, false);
+    GLWindowInterface::setHandler (gWindow, true);
 
     updateMatch ();
 }
