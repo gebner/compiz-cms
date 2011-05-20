@@ -28,6 +28,14 @@
 
 #include "cms_options.h"
 
+struct CmsFunction {
+    GLFragment::FunctionId id;
+    bool alpha;
+    int target;
+    int param;
+    int unit;
+};
+
 class CmsScreen :
     public PluginClassHandler <CmsScreen, CompScreen>,
     public CmsOptions
@@ -37,18 +45,14 @@ class CmsScreen :
 	CmsScreen (CompScreen *);
 	virtual ~CmsScreen ();
 
-	GLuint cmsFunction;
-	int cmsFunctionParam, cmsFunctionUnit;
-	
-	bool
-	checkStateTimeout ();
+	std::vector<CmsFunction> cmsFunctions;
 
 	void
 	optionChanged (CompOption          *opt,
 		       CmsOptions::Options num);
 
 	GLuint
-	getFragmentFunction (GLTexture *texture,
+	getFragmentFunction (int       target,
 			     bool      alpha,
 			     int       param,
 			     int       unit);

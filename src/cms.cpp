@@ -42,15 +42,17 @@ CmsWindow::updateMatch ()
 }
 
 GLuint
-CmsScreen::getFragmentFunction (GLTexture *texture,
+CmsScreen::getFragmentFunction (int	  target,
 				bool      alpha,
 				int	  param,
 				int	  unit)
 {
-    alpha = true;
-
-    if (cmsFunctionParam == param && cmsFunctionUnit == unit) {
-      return cmsFunction;
+    foreach (CmsFunction& f, cmsFunctions)
+    {
+	if (f.alpha == alpha && f.target == target && f.param == param && f.unit == unit)
+	{
+	    return f.id;
+	}
     }
 
     FunctionData data;
@@ -60,11 +62,6 @@ CmsScreen::getFragmentFunction (GLTexture *texture,
       data.addTempHeaderOp ("temp");
     }
 
-    int target;
-    if (texture->target () == GL_TEXTURE_2D)
-	target = COMP_FETCH_TARGET_2D;
-    else
-	target = COMP_FETCH_TARGET_RECT;
     data.addFetchOp ("output", NULL, target);
 
     if (alpha)
@@ -87,11 +84,16 @@ CmsScreen::getFragmentFunction (GLTexture *texture,
     if (!data.status ())
 	return 0;
 
-    cmsFunction = data.createFragmentFunction ("cms");
-    cmsFunctionParam = param;
-    cmsFunctionUnit = unit;
+    CmsFunction f;
+    f.id = data.createFragmentFunction ("cms");
+    f.alpha = alpha;
+    f.target = target;
+    f.param = param;
+    f.unit = unit;
 
-    return cmsFunction;
+    cmsFunctions.push_back(f);
+
+    return f.id;
 }
 
 const int GRIDSIZE = 64;
@@ -209,17 +211,19 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 
     if (ns->lut && doCms && GL::fragmentProgram)
     {
-	//printf("glDrawTexture: %s\n", window->resName().c_str());
-
 	GLFragment::Attrib fa = attrib;
 
-	bool alpha = true;
-	//if (texture->name () == tex->name ()) /* Not a decoration */
-	    //alpha = window->alpha ();
+	bool alpha = isDecoration || window->alpha();
+
+	int target;
+	if (texture->target () == GL_TEXTURE_2D)
+	    target = COMP_FETCH_TARGET_2D;
+	else
+	    target = COMP_FETCH_TARGET_RECT;
 
 	int param = fa.allocParameters(2);
 	int unit = fa.allocTextureUnits(1);
-	GLuint function = ns->getFragmentFunction (texture, alpha, param, unit);
+	GLuint function = ns->getFragmentFunction (target, alpha, param, unit);
 	fa.addFunction (function);
 
 	GLfloat scale = (GLfloat) (GRIDSIZE - 1) / GRIDSIZE;
@@ -230,10 +234,9 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 	GL::programEnvParameter4f( GL_FRAGMENT_PROGRAM_ARB, param + 1,
 		offset, offset, offset, 0.0);
 
-	(*GL::activeTexture) (GL_TEXTURE0_ARB + unit);
-	//glEnable(GL_TEXTURE_3D);
+	GL::activeTexture (GL_TEXTURE0_ARB + unit);
 	glBindTexture(GL_TEXTURE_3D, ns->lut);
-	(*GL::activeTexture) (GL_TEXTURE0_ARB);
+	GL::activeTexture (GL_TEXTURE0_ARB);
 
 	gWindow->glDrawTexture (texture, fa, mask);
     }
@@ -269,7 +272,6 @@ CmsScreen::optionChanged (CompOption          *opt,
 CmsScreen::CmsScreen (CompScreen *screen) :
     PluginClassHandler <CmsScreen, CompScreen> (screen),
     CmsOptions (),
-    cmsFunction (0),
     gScreen (GLScreen::get (screen)),
     lut (0)
 {
@@ -289,10 +291,11 @@ CmsScreen::~CmsScreen () {
 	lut = 0;
     }
 
-    if (cmsFunction) {
-	GL::deletePrograms(1, &cmsFunction);
-	cmsFunction = 0;
+    foreach (CmsFunction& f, cmsFunctions)
+    {
+	GL::deletePrograms(1, &f.id);
     }
+    cmsFunctions.clear();
 }
 
 void
