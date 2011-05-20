@@ -26,6 +26,7 @@
 #include <lcms.h>
 #include <GL/glext.h>
 #include <X11/Xatom.h>
+#include <limits.h>
 #include <memory>
 
 using namespace GLFragment;
@@ -125,20 +126,7 @@ CmsScreen::setupLUT ()
     unsigned long len, bytes_left;
     res = XGetWindowProperty(screen->dpy(), screen->root(),
 	_ICC_PROFILE,
-	0, 0,
-	false,
-	XA_CARDINAL,
-	&type,
-	&format,
-	&len, &bytes_left,
-	&icc);
-    if (type == None) {
-	return;
-    }
-    XFree(icc);
-    res = XGetWindowProperty(screen->dpy(), screen->root(),
-	_ICC_PROFILE,
-	0, bytes_left,
+	0, LONG_MAX,
 	false,
 	XA_CARDINAL,
 	&type,
