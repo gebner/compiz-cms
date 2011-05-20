@@ -32,69 +32,76 @@ using namespace GLFragment;
 
 COMPIZ_PLUGIN_20090315 (cms, CmsPluginVTable);
 
-void
-CmsWindow::updateMatch ()
+CmsScreen::CmsScreen (CompScreen *screen) :
+    PluginClassHandler <CmsScreen, CompScreen> (screen),
+    CmsOptions (),
+    gScreen (GLScreen::get (screen)),
+    lut (0)
 {
-    CMS_SCREEN (screen);
+    ScreenInterface::setHandler (screen, false);
 
-    isCms = !ns->optionGetExcludeMatch ().evaluate (window);
+    optionSetExcludeMatchNotify (
+	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
+    optionSetDecorationsNotify (
+	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
 
-    cWindow->addDamage ();
+    _ICC_PROFILE = XInternAtom(screen->dpy(), "_ICC_PROFILE", false);
+
+    setupLUT();
+
+    screen->handleEventSetEnabled (this, true);
 }
 
-GLuint
-CmsScreen::getFragmentFunction (int	  target,
-				bool      alpha,
-				int	  param,
-				int	  unit)
-{
+CmsScreen::~CmsScreen () {
+    if (lut) {
+	glDeleteTextures(1, &lut);
+	lut = 0;
+    }
+
     foreach (CmsFunction& f, cmsFunctions)
     {
-	if (f.alpha == alpha && f.target == target && f.param == param && f.unit == unit)
+	GL::deletePrograms(1, &f.id);
+    }
+    cmsFunctions.clear();
+}
+
+void
+CmsScreen::optionChanged (CompOption          *opt,
+			  CmsOptions::Options num)
+{
+    switch (num)
+    {
+    case CmsOptions::Decorations:
+    case CmsOptions::ExcludeMatch:
 	{
-	    return f.id;
+	    foreach (CompWindow *w, screen->windows ())
+	    {
+		CMS_WINDOW (w);
+
+		cw->updateMatch ();
+	    }
+	}
+	break;
+    default:
+	break;
+    }
+}
+
+void
+CmsScreen::handleEvent (XEvent *event)
+{
+    screen->handleEvent (event);
+
+    if (event->type == PropertyNotify
+	    && event->xproperty.window == screen->root()
+	    && event->xproperty.atom == _ICC_PROFILE) {
+	setupLUT();
+
+	foreach (CompWindow *window, screen->windows())
+	{
+	    CompositeWindow::get(window)->addDamage();
 	}
     }
-
-    FunctionData data;
-
-    if (alpha)
-    {
-      data.addTempHeaderOp ("temp");
-    }
-
-    data.addFetchOp ("output", NULL, target);
-
-    if (alpha)
-    {
-	data.addDataOp ("MUL output.rgb, output.a, output;");
-	data.addDataOp ("MUL temp.a, output.a, output.a;");
-    }
-
-    data.addDataOp ("MAD output, output, program.env[%d], program.env[%d];", param, param + 1);
-
-    data.addDataOp ("TEX output, output, texture[%d], 3D;", unit);
-
-    if (alpha)
-    {
-	data.addDataOp ("MUL output, temp.a, output;");
-    }
-
-    data.addColorOp ("output", "output");
-
-    if (!data.status ())
-	return 0;
-
-    CmsFunction f;
-    f.id = data.createFragmentFunction ("cms");
-    f.alpha = alpha;
-    f.target = target;
-    f.param = param;
-    f.unit = unit;
-
-    cmsFunctions.push_back(f);
-
-    return f.id;
 }
 
 const int GRIDSIZE = 64;
@@ -192,21 +199,85 @@ CmsScreen::setupLUT ()
 	0, GL_RGB, GL_UNSIGNED_SHORT, output->a);
 }
 
-void
-CmsScreen::handleEvent (XEvent *event)
+GLuint
+CmsScreen::getFragmentFunction (int	  target,
+				bool      alpha,
+				int	  param,
+				int	  unit)
 {
-    screen->handleEvent (event);
-
-    if (event->type == PropertyNotify
-	    && event->xproperty.window == screen->root()
-	    && event->xproperty.atom == _ICC_PROFILE) {
-	setupLUT();
-
-	foreach (CompWindow *window, screen->windows())
+    foreach (CmsFunction& f, cmsFunctions)
+    {
+	if (f.alpha == alpha && f.target == target && f.param == param && f.unit == unit)
 	{
-	    CompositeWindow::get(window)->addDamage();
+	    return f.id;
 	}
     }
+
+    FunctionData data;
+
+    if (alpha)
+    {
+      data.addTempHeaderOp ("temp");
+    }
+
+    data.addFetchOp ("output", NULL, target);
+
+    if (alpha)
+    {
+	data.addDataOp ("MUL output.rgb, output.a, output;");
+	data.addDataOp ("MUL temp.a, output.a, output.a;");
+    }
+
+    data.addDataOp ("MAD output, output, program.env[%d], program.env[%d];", param, param + 1);
+
+    data.addDataOp ("TEX output, output, texture[%d], 3D;", unit);
+
+    if (alpha)
+    {
+	data.addDataOp ("MUL output, temp.a, output;");
+    }
+
+    data.addColorOp ("output", "output");
+
+    if (!data.status ())
+	return 0;
+
+    CmsFunction f;
+    f.id = data.createFragmentFunction ("cms");
+    f.alpha = alpha;
+    f.target = target;
+    f.param = param;
+    f.unit = unit;
+
+    cmsFunctions.push_back(f);
+
+    return f.id;
+}
+
+CmsWindow::CmsWindow (CompWindow *window) :
+    PluginClassHandler <CmsWindow, CompWindow> (window),
+    window (window),
+    cWindow (CompositeWindow::get (window)),
+    gWindow (GLWindow::get (window)),
+    isCms (false)
+{
+    GLWindowInterface::setHandler (gWindow, true);
+
+    updateMatch ();
+}
+
+CmsWindow::~CmsWindow ()
+{
+}
+
+void
+CmsWindow::updateMatch ()
+{
+    CMS_SCREEN (screen);
+
+    isCms = !cs->optionGetExcludeMatch ().evaluate (window);
+
+    cWindow->addDamage ();
 }
 
 void
@@ -226,9 +297,9 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 	}
     }
 
-    bool doCms = isDecoration ? ns->optionGetDecorations () : isCms;
+    bool doCms = isDecoration ? cs->optionGetDecorations () : isCms;
 
-    if (ns->lut && doCms && GL::fragmentProgram)
+    if (cs->lut && doCms && GL::fragmentProgram)
     {
 	GLFragment::Attrib fa = attrib;
 
@@ -242,7 +313,7 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 
 	int param = fa.allocParameters(2);
 	int unit = fa.allocTextureUnits(1);
-	GLuint function = ns->getFragmentFunction (target, alpha, param, unit);
+	GLuint function = cs->getFragmentFunction (target, alpha, param, unit);
 	fa.addFunction (function);
 
 	GLfloat scale = (GLfloat) (GRIDSIZE - 1) / GRIDSIZE;
@@ -254,7 +325,7 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 		offset, offset, offset, 0.0);
 
 	GL::activeTexture (GL_TEXTURE0_ARB + unit);
-	glBindTexture(GL_TEXTURE_3D, ns->lut);
+	glBindTexture(GL_TEXTURE_3D, cs->lut);
 	GL::activeTexture (GL_TEXTURE0_ARB);
 
 	gWindow->glDrawTexture (texture, fa, mask);
@@ -266,83 +337,6 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
     }
 }
 
-void
-CmsScreen::optionChanged (CompOption          *opt,
-			  CmsOptions::Options num)
-{
-    switch (num)
-    {
-    case CmsOptions::Decorations:
-    case CmsOptions::ExcludeMatch:
-	{
-	    foreach (CompWindow *w, screen->windows ())
-	    {
-		CMS_WINDOW (w);
-
-		nw->updateMatch ();
-	    }
-	}
-	break;
-    default:
-	break;
-    }
-}
-
-CmsScreen::CmsScreen (CompScreen *screen) :
-    PluginClassHandler <CmsScreen, CompScreen> (screen),
-    CmsOptions (),
-    gScreen (GLScreen::get (screen)),
-    lut (0)
-{
-    ScreenInterface::setHandler (screen, false);
-
-    optionSetExcludeMatchNotify (
-	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
-    optionSetDecorationsNotify (
-	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
-
-    _ICC_PROFILE = XInternAtom(screen->dpy(), "_ICC_PROFILE", false);
-
-    setupLUT();
-
-    screen->handleEventSetEnabled (this, true);
-}
-
-CmsScreen::~CmsScreen () {
-    if (lut) {
-	glDeleteTextures(1, &lut);
-	lut = 0;
-    }
-
-    foreach (CmsFunction& f, cmsFunctions)
-    {
-	GL::deletePrograms(1, &f.id);
-    }
-    cmsFunctions.clear();
-}
-
-void
-CmsWindow::postLoad ()
-{
-    updateMatch ();
-}
-	
-
-CmsWindow::CmsWindow (CompWindow *window) :
-    PluginClassHandler <CmsWindow, CompWindow> (window),
-    window (window),
-    cWindow (CompositeWindow::get (window)),
-    gWindow (GLWindow::get (window)),
-    isCms (false)
-{
-    GLWindowInterface::setHandler (gWindow, true);
-
-    updateMatch ();
-}
-
-CmsWindow::~CmsWindow ()
-{
-}
 
 bool
 CmsPluginVTable::init ()

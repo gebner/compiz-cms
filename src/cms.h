@@ -46,29 +46,25 @@ class CmsScreen :
 	CmsScreen (CompScreen *);
 	virtual ~CmsScreen ();
 
+	GLScreen *gScreen;
 	std::vector<CmsFunction> cmsFunctions;
+	GLuint lut;
+	Atom _ICC_PROFILE;
 
 	void
 	optionChanged (CompOption          *opt,
 		       CmsOptions::Options num);
+
+	void handleEvent (XEvent *event);
+
+	void
+	setupLUT ();
 
 	GLuint
 	getFragmentFunction (int       target,
 			     bool      alpha,
 			     int       param,
 			     int       unit);
-
-	void handleEvent (XEvent *event);
-
-	GLScreen *gScreen;
-
-	GLuint lut;
-
-    private:
-	Atom _ICC_PROFILE;
-
-	void
-	setupLUT ();
 };
 
 class CmsWindow :
@@ -76,8 +72,6 @@ class CmsWindow :
     public GLWindowInterface
 {
     public:
-    
-	void postLoad ();
 
 	CmsWindow (CompWindow *);
 	~CmsWindow ();
@@ -98,10 +92,10 @@ class CmsWindow :
 };
 
 #define CMS_SCREEN(s)							      \
-    CmsScreen *ns = CmsScreen::get (s);
+    CmsScreen *cs = CmsScreen::get (s);
 
 #define CMS_WINDOW(w)							      \
-    CmsWindow *nw = CmsWindow::get (w);
+    CmsWindow *cw = CmsWindow::get (w);
 
 class CmsPluginVTable :
     public CompPlugin::VTableForScreenAndWindow <CmsScreen, CmsWindow>
