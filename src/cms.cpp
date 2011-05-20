@@ -193,6 +193,23 @@ CmsScreen::setupLUT ()
 }
 
 void
+CmsScreen::handleEvent (XEvent *event)
+{
+    screen->handleEvent (event);
+
+    if (event->type == PropertyNotify
+	    && event->xproperty.window == screen->root()
+	    && event->xproperty.atom == _ICC_PROFILE) {
+	setupLUT();
+
+	foreach (CompWindow *window, screen->windows())
+	{
+	    CompositeWindow::get(window)->addDamage();
+	}
+    }
+}
+
+void
 CmsWindow::glDrawTexture (GLTexture          *texture,
 			  GLFragment::Attrib &attrib,
 			  unsigned int       mask)
@@ -277,6 +294,8 @@ CmsScreen::CmsScreen (CompScreen *screen) :
     gScreen (GLScreen::get (screen)),
     lut (0)
 {
+    ScreenInterface::setHandler (screen, false);
+
     optionSetExcludeMatchNotify (
 	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
     optionSetDecorationsNotify (
@@ -285,6 +304,8 @@ CmsScreen::CmsScreen (CompScreen *screen) :
     _ICC_PROFILE = XInternAtom(screen->dpy(), "_ICC_PROFILE", false);
 
     setupLUT();
+
+    screen->handleEventSetEnabled (this, true);
 }
 
 CmsScreen::~CmsScreen () {

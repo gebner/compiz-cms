@@ -38,6 +38,7 @@ struct CmsFunction {
 
 class CmsScreen :
     public PluginClassHandler <CmsScreen, CompScreen>,
+    public ScreenInterface,
     public CmsOptions
 {
     public:
@@ -56,6 +57,8 @@ class CmsScreen :
 			     bool      alpha,
 			     int       param,
 			     int       unit);
+
+	void handleEvent (XEvent *event);
 
 	GLScreen *gScreen;
 
