@@ -7,6 +7,7 @@
 	<deps>
 	    <requirement>
 		<plugin>opengl</plugin>
+		<plugin>regex</plugin>
 	    </requirement>
 	    <relation type="after">
 		<plugin>composite</plugin>
@@ -16,10 +17,15 @@
 	    </relation>
 	</deps>
 	<options>
+	    <option name="decorations" type="bool">
+		<_short>Color managed window decorations</_short>
+		<_long>Also color manage window decorations, not only the window contents.</_long>
+		<default>true</default>
+	    </option>
 	    <option name="exclude_match" type="match">
 		<_short>Exclude Windows</_short>
 		<_long>Windows to exclude from color management</_long>
-		<default>none</default>
+		<default>class=Firefox | class=Gimp | class=Geeqie | class=Rawtherapee | class=Ufraw</default>
 	    </option>
 	</options>
     </plugin>
