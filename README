@@ -4,7 +4,7 @@ Dependencies are only compiz and lcms.  The ICC profile is retrieved using the
 _ICC_PROFILE atom as set by gnome-color-manager.  Compiz-style window
 exclusions are supported.
 
-This plugin is based on code from the compicc plugin by Kai-Uwe Bergmann:
+This plugin is based on code from the compicc plugin by Kai-Uwe Behrmann:
 http://compicc.sf.net/
 
 To install:
