@@ -1,15 +1,12 @@
-/*
+/* vim:sts=4 sw=4:
+ *
  * Copyright (c) 2006 Darryll Truchan <moppsy@comcast.net>
  *	     (C) 2011 Gabriel Ebner <gebner@2b7e.org>
- *
- * Pixel shader cmsating by Dennis Kasprzyk <onestone@beryl-project.org>
- * Usage of matches by Danny Baumann <maniac@beryl-project.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
-
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
