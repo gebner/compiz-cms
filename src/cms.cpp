@@ -25,6 +25,7 @@
 #include "cms.h"
 #include <lcms.h>
 #include <GL/glext.h>
+#include <X11/Xatom.h>
 
 using namespace GLFragment;
 
@@ -312,7 +313,6 @@ CmsWindow::postLoad ()
 
 CmsWindow::CmsWindow (CompWindow *window) :
     PluginClassHandler <CmsWindow, CompWindow> (window),
-    PluginStateWriter <CmsWindow> (this, window->id ()),
     window (window),
     cWindow (CompositeWindow::get (window)),
     gWindow (GLWindow::get (window)),
@@ -325,7 +325,6 @@ CmsWindow::CmsWindow (CompWindow *window) :
 
 CmsWindow::~CmsWindow ()
 {
-    writeSerializedData ();
 }
 
 bool

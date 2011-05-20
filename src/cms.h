@@ -21,7 +21,6 @@
 
 #include <core/core.h>
 #include <core/pluginclasshandler.h>
-#include <core/serialization.h>
 
 #include <composite/composite.h>
 #include <opengl/opengl.h>
@@ -67,17 +66,10 @@ class CmsScreen :
 
 class CmsWindow :
     public PluginClassHandler <CmsWindow, CompWindow>,
-    public PluginStateWriter <CmsWindow>,
     public GLWindowInterface
 {
     public:
     
-	template <class Archive>
-	void serialize (Archive &ar, const unsigned int version)
-	{
-	    ar & isCms;
-	}
-	
 	void postLoad ();
 
 	CmsWindow (CompWindow *);
