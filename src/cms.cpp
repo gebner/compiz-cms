@@ -26,6 +26,7 @@
 #include <lcms.h>
 #include <GL/glext.h>
 #include <X11/Xatom.h>
+#include <memory>
 
 using namespace GLFragment;
 
@@ -113,9 +114,9 @@ CmsScreen::setupLUT ()
     // fetch ICC profile
     unsigned char *icc;
     Atom type;
-    int format;
+    int format, res;
     unsigned long len, bytes_left;
-    XGetWindowProperty(screen->dpy(), screen->root(),
+    res = XGetWindowProperty(screen->dpy(), screen->root(),
 	_ICC_PROFILE,
 	0, 0,
 	false,
@@ -128,7 +129,7 @@ CmsScreen::setupLUT ()
 	return;
     }
     XFree(icc);
-    XGetWindowProperty(screen->dpy(), screen->root(),
+    res = XGetWindowProperty(screen->dpy(), screen->root(),
 	_ICC_PROFILE,
 	0, bytes_left,
 	false,
@@ -137,6 +138,10 @@ CmsScreen::setupLUT ()
 	&format,
 	&len, &bytes_left,
 	&icc);
+    if (res != Success) {
+	XFree(icc);
+	return;
+    }
     
     cmsHPROFILE outputProfile = cmsOpenProfileFromMem(icc, len);
     if (!outputProfile) {
@@ -145,8 +150,8 @@ CmsScreen::setupLUT ()
     }
 
     // populate sampling grid
-    memlut *input = new memlut;
-    memlut *output = new memlut;
+    std::auto_ptr<memlut> input(new memlut),
+			  output(new memlut);
 
     for (int r = 0; r < GRIDSIZE; r++) {
 	for (int g = 0; g < GRIDSIZE; g++) {
@@ -166,12 +171,12 @@ CmsScreen::setupLUT ()
 	INTENT_PERCEPTUAL,
 	cmsFLAGS_NOTPRECALC);
 
-    cmsDoTransform(transf, input, output, GRIDSIZE*GRIDSIZE*GRIDSIZE);
+    cmsDoTransform(transf, input.get(), output.get(), GRIDSIZE*GRIDSIZE*GRIDSIZE);
 
     cmsDeleteTransform(transf);
+    cmsCloseProfile(inputProfile);
+    cmsCloseProfile(outputProfile);
     XFree(icc);
-
-    delete input;
 
     // save into a texture
     glGenTextures(1, &lut);
@@ -185,9 +190,6 @@ CmsScreen::setupLUT ()
     
     glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB16, GRIDSIZE,GRIDSIZE,GRIDSIZE,
 	0, GL_RGB, GL_UNSIGNED_SHORT, output->a);
-
-    
-    delete output;
 }
 
 void
