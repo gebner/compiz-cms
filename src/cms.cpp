@@ -133,7 +133,7 @@ CmsScreen::setupLUT ()
 	&format,
 	&len, &bytes_left,
 	&icc);
-    if (res != Success) {
+    if (res != Success || len == 0) {
 	XFree(icc);
 	return;
     }
