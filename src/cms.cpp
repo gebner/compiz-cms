@@ -27,17 +27,150 @@
 #include <GL/glext.h>
 #include <X11/Xatom.h>
 #include <limits.h>
-#include <memory>
 
 using namespace GLFragment;
 
 COMPIZ_PLUGIN_20090315 (cms, CmsPluginVTable);
 
+CmsFunction::CmsFunction (int	  target,
+			  bool    alpha,
+			  int	  param,
+			  int	  unit)
+    : id(0), alpha(alpha), target(target), param(param), unit(unit)
+{
+    FunctionData data;
+
+    if (alpha)
+    {
+      data.addTempHeaderOp ("temp");
+    }
+
+    data.addFetchOp ("output", NULL, target);
+
+    if (alpha)
+    {
+	data.addDataOp ("MUL output.rgb, output.a, output;");
+	data.addDataOp ("MUL temp.a, output.a, output.a;");
+    }
+
+    data.addDataOp ("MAD output, output, program.env[%d], program.env[%d];", param, param + 1);
+
+    data.addDataOp ("TEX output, output, texture[%d], 3D;", unit);
+
+    if (alpha)
+    {
+	data.addDataOp ("MUL output, temp.a, output;");
+    }
+
+    data.addColorOp ("output", "output");
+
+    if (!data.status ()) {
+	id = 0;
+    } else {
+	id = data.createFragmentFunction ("cms");
+    }
+}
+
+CmsFunction::~CmsFunction() {
+    if (id) {
+	GL::deletePrograms(1, &id);
+	id = 0;
+    }
+}
+
+const int GRIDSIZE = 64;
+struct memlut {
+    GLushort a[GRIDSIZE][GRIDSIZE][GRIDSIZE][3];
+};
+
+CmsLut::CmsLut (CompScreen *screen, RROutput output, unsigned char *icc, int len, bool fromOutput)
+    : texture_id(0), output(output), fromOutput(output)
+{
+    // get output rect
+    XRRScreenResources *res = XRRGetScreenResources(
+	screen->dpy(), screen->root());
+    if (!res) {
+	return;
+    }
+
+    XRROutputInfo *outputInfo = XRRGetOutputInfo(
+	screen->dpy(), res, output);
+    if (!outputInfo) {
+	XRRFreeScreenResources(res);
+	return;
+    }
+
+    XRRCrtcInfo *crtcInfo = XRRGetCrtcInfo(
+	screen->dpy(), res, outputInfo->crtc);
+    if (!crtcInfo) {
+	XRRFreeOutputInfo(outputInfo);
+	XRRFreeScreenResources(res);
+	return;
+    }
+
+    rect = CompRect(crtcInfo->x, crtcInfo->y,
+	crtcInfo->width, crtcInfo->height);
+
+    XRRFreeCrtcInfo(crtcInfo);
+    XRRFreeOutputInfo(outputInfo);
+    XRRFreeScreenResources(res);
+
+    // make profile
+    cmsHPROFILE outputProfile = cmsOpenProfileFromMem(icc, len);
+
+    // populate sampling grid
+    std::auto_ptr<memlut> in(new memlut),
+			  out(new memlut);
+
+    for (int r = 0; r < GRIDSIZE; r++) {
+	for (int g = 0; g < GRIDSIZE; g++) {
+	    for (int b = 0; b < GRIDSIZE; b++) {
+		in->a[b][g][r][0] = ((0xffff-1)*r)/GRIDSIZE;
+		in->a[b][g][r][1] = ((0xffff-1)*g)/GRIDSIZE;
+		in->a[b][g][r][2] = ((0xffff-1)*b)/GRIDSIZE;
+	    }
+	}
+    }
+
+    // transform
+    cmsHPROFILE inputProfile = cmsCreate_sRGBProfile();
+    cmsHTRANSFORM transf = cmsCreateTransform(
+	inputProfile, TYPE_RGB_16,
+	outputProfile, TYPE_RGB_16,
+	INTENT_PERCEPTUAL,
+	cmsFLAGS_NOTPRECALC);
+
+    cmsDoTransform(transf, in.get(), out.get(), GRIDSIZE*GRIDSIZE*GRIDSIZE);
+
+    cmsDeleteTransform(transf);
+    cmsCloseProfile(inputProfile);
+    cmsCloseProfile(outputProfile);
+
+    // save into a texture
+    glGenTextures(1, &texture_id);
+    glBindTexture(GL_TEXTURE_3D, texture_id);
+
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB16, GRIDSIZE,GRIDSIZE,GRIDSIZE,
+	0, GL_RGB, GL_UNSIGNED_SHORT, out->a);
+}
+
+CmsLut::~CmsLut() {
+    if (texture_id) {
+	glDeleteTextures(1, &texture_id);
+	texture_id = 0;
+    }
+}
+
 CmsScreen::CmsScreen (CompScreen *screen) :
     PluginClassHandler <CmsScreen, CompScreen> (screen),
     CmsOptions (),
-    gScreen (GLScreen::get (screen)),
-    lut (0)
+    gScreen (GLScreen::get (screen))
 {
     ScreenInterface::setHandler (screen, false);
 
@@ -47,24 +180,16 @@ CmsScreen::CmsScreen (CompScreen *screen) :
 	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
 
     _ICC_PROFILE = XInternAtom(screen->dpy(), "_ICC_PROFILE", false);
+    XRRQueryExtension(screen->dpy(), &randrEvent, &randrError);
 
-    setupLUT();
+    setupLUTs();
 
+    XRRSelectInput(screen->dpy(), screen->root(),
+	RROutputPropertyNotifyMask | RROutputChangeNotifyMask);
     screen->handleEventSetEnabled (this, true);
 }
 
-CmsScreen::~CmsScreen () {
-    if (lut) {
-	glDeleteTextures(1, &lut);
-	lut = 0;
-    }
-
-    foreach (CmsFunction& f, cmsFunctions)
-    {
-	GL::deletePrograms(1, &f.id);
-    }
-    cmsFunctions.clear();
-}
+CmsScreen::~CmsScreen () {}
 
 void
 CmsScreen::optionChanged (CompOption          *opt,
@@ -96,7 +221,32 @@ CmsScreen::handleEvent (XEvent *event)
     if (event->type == PropertyNotify
 	    && event->xproperty.window == screen->root()
 	    && event->xproperty.atom == _ICC_PROFILE) {
-	setupLUT();
+	if (!hasPerOutputProfiles()) {
+	    setupLUTs();
+
+	    foreach (CompWindow *window, screen->windows())
+	    {
+		CompositeWindow::get(window)->addDamage();
+	    }
+	}
+    } else if (event->type == randrEvent + RRNotify
+	    && ((XRRNotifyEvent *) event)->subtype == RRNotify_OutputProperty) {
+	XRROutputPropertyNotifyEvent *ev =
+	    (XRROutputPropertyNotifyEvent *) event;
+	if (ev->property == _ICC_PROFILE) {
+	    setupOutputLUT(ev->output);
+
+	    foreach (CompWindow *window, screen->windows())
+	    {
+		CompositeWindow::get(window)->addDamage();
+	    }
+	}
+    } else if (event->type == randrEvent + RRNotify
+	    && ((XRRNotifyEvent *) event)->subtype == RRNotify_OutputChange) {
+	XRROutputChangeNotifyEvent *ev =
+	    (XRROutputChangeNotifyEvent *) event;
+
+	setupOutputLUT(ev->output);
 
 	foreach (CompWindow *window, screen->windows())
 	{
@@ -105,28 +255,28 @@ CmsScreen::handleEvent (XEvent *event)
     }
 }
 
-const int GRIDSIZE = 64;
-struct memlut {
-    GLushort a[GRIDSIZE][GRIDSIZE][GRIDSIZE][3];
-};
-
 void
-CmsScreen::setupLUT ()
+CmsScreen::setupOutputLUT (RROutput output)
 {
-    // free existing lut
-    if (lut != 0) {
-	glDeleteTextures(1, &lut);
-	lut = 0;
+    for (boost::ptr_vector<CmsLut>::iterator it = cmsLut.begin();
+	    it != cmsLut.end(); ++it) {
+	if (it->output == output) {
+	    cmsLut.erase(it);
+	    break;
+	}
     }
+
+    bool fromOutput = true;
 
     // fetch ICC profile
     unsigned char *icc;
     Atom type;
     int format, res;
     unsigned long len, bytes_left;
-    res = XGetWindowProperty(screen->dpy(), screen->root(),
+    res = XRRGetOutputProperty(screen->dpy(), output,
 	_ICC_PROFILE,
 	0, LONG_MAX,
+	false,
 	false,
 	XA_CARDINAL,
 	&type,
@@ -135,56 +285,54 @@ CmsScreen::setupLUT ()
 	&icc);
     if (res != Success || len == 0) {
 	XFree(icc);
-	return;
-    }
-    
-    cmsHPROFILE outputProfile = cmsOpenProfileFromMem(icc, len);
-    if (!outputProfile) {
-      XFree(icc);
-      return;
-    }
 
-    // populate sampling grid
-    std::auto_ptr<memlut> input(new memlut),
-			  output(new memlut);
-
-    for (int r = 0; r < GRIDSIZE; r++) {
-	for (int g = 0; g < GRIDSIZE; g++) {
-	    for (int b = 0; b < GRIDSIZE; b++) {
-		input->a[b][g][r][0] = ((0xffff-1)*r)/GRIDSIZE;
-		input->a[b][g][r][1] = ((0xffff-1)*g)/GRIDSIZE;
-		input->a[b][g][r][2] = ((0xffff-1)*b)/GRIDSIZE;
-	    }
+	fromOutput = false;
+	res = XGetWindowProperty(screen->dpy(), screen->root(),
+	    _ICC_PROFILE,
+	    0, LONG_MAX,
+	    false,
+	    XA_CARDINAL,
+	    &type,
+	    &format,
+	    &len, &bytes_left,
+	    &icc);
+	if (res != Success || len == 0) {
+	    XFree(icc);
+	    return;
 	}
     }
 
-    // transform
-    cmsHPROFILE inputProfile = cmsCreate_sRGBProfile();
-    cmsHTRANSFORM transf = cmsCreateTransform(
-	inputProfile, TYPE_RGB_16,
-	outputProfile, TYPE_RGB_16,
-	INTENT_PERCEPTUAL,
-	cmsFLAGS_NOTPRECALC);
+    CmsLut *lut = new CmsLut(screen, output, icc, len, fromOutput);
+    if (lut->texture_id != 0) {
+	cmsLut.push_back(lut);
+    } else {
+	delete lut;
+    }
+}
 
-    cmsDoTransform(transf, input.get(), output.get(), GRIDSIZE*GRIDSIZE*GRIDSIZE);
+void
+CmsScreen::setupLUTs () {
+    if (!screen->XRandr()) return;
 
-    cmsDeleteTransform(transf);
-    cmsCloseProfile(inputProfile);
-    cmsCloseProfile(outputProfile);
-    XFree(icc);
+    XRRScreenResources *res =
+	XRRGetScreenResources(screen->dpy(), screen->root());
+    if (!res) return;
 
-    // save into a texture
-    glGenTextures(1, &lut);
-    glBindTexture(GL_TEXTURE_3D, lut);
+    for (int i = 0; i < res->noutput; i++) {
+	setupOutputLUT(res->outputs[i]);
+    }
 
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    
-    glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB16, GRIDSIZE,GRIDSIZE,GRIDSIZE,
-	0, GL_RGB, GL_UNSIGNED_SHORT, output->a);
+    XRRFreeScreenResources(res);
+}
+
+bool
+CmsScreen::hasPerOutputProfiles () {
+    foreach (CmsLut& lut, cmsLut) {
+	if (lut.fromOutput) {
+	    return true;
+	}
+    }
+    return false;
 }
 
 GLuint
@@ -201,45 +349,11 @@ CmsScreen::getFragmentFunction (int	  target,
 	}
     }
 
-    FunctionData data;
-
-    if (alpha)
-    {
-      data.addTempHeaderOp ("temp");
-    }
-
-    data.addFetchOp ("output", NULL, target);
-
-    if (alpha)
-    {
-	data.addDataOp ("MUL output.rgb, output.a, output;");
-	data.addDataOp ("MUL temp.a, output.a, output.a;");
-    }
-
-    data.addDataOp ("MAD output, output, program.env[%d], program.env[%d];", param, param + 1);
-
-    data.addDataOp ("TEX output, output, texture[%d], 3D;", unit);
-
-    if (alpha)
-    {
-	data.addDataOp ("MUL output, temp.a, output;");
-    }
-
-    data.addColorOp ("output", "output");
-
-    if (!data.status ())
-	return 0;
-
-    CmsFunction f;
-    f.id = data.createFragmentFunction ("cms");
-    f.alpha = alpha;
-    f.target = target;
-    f.param = param;
-    f.unit = unit;
+    CmsFunction *f = new CmsFunction(target, alpha, param, unit);
 
     cmsFunctions.push_back(f);
 
-    return f.id;
+    return f->id;
 }
 
 CmsWindow::CmsWindow (CompWindow *window) :
@@ -286,8 +400,19 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
     }
 
     bool doCms = isDecoration ? cs->optionGetDecorations () : isCms;
+    CmsLut *lut = 0;
 
-    if (cs->lut && doCms && GL::fragmentProgram)
+    if (doCms) {
+	CompRect borderRect = window->borderRect();
+	foreach (CmsLut& l, cs->cmsLut) {
+	    if (borderRect.intersects(l.rect)) {
+		lut = &l;
+		break;
+	    }
+	}
+    }
+
+    if (lut && doCms && GL::fragmentProgram)
     {
 	GLFragment::Attrib fa = attrib;
 
@@ -313,7 +438,7 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 		offset, offset, offset, 0.0);
 
 	GL::activeTexture (GL_TEXTURE0_ARB + unit);
-	glBindTexture(GL_TEXTURE_3D, cs->lut);
+	glBindTexture(GL_TEXTURE_3D, lut->texture_id);
 	GL::activeTexture (GL_TEXTURE0_ARB);
 
 	gWindow->glDrawTexture (texture, fa, mask);

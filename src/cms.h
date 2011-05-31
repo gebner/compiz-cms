@@ -25,15 +25,34 @@
 #include <composite/composite.h>
 #include <opengl/opengl.h>
 
+#include <X11/extensions/Xrandr.h>
+#include <boost/ptr_container/ptr_vector.hpp>
+#include <memory>
 
 #include "cms_options.h"
 
 struct CmsFunction {
+    CmsFunction (int       target,
+		 bool      alpha,
+		 int       param,
+		 int       unit);
+    ~CmsFunction();
+
     GLFragment::FunctionId id;
     bool alpha;
     int target;
     int param;
     int unit;
+};
+
+struct CmsLut {
+    CmsLut(CompScreen *screen, RROutput output, unsigned char *icc, int len, bool fromOutput);
+    ~CmsLut();
+
+    GLuint texture_id;
+    RROutput output;
+    bool fromOutput;
+    CompRect rect;
 };
 
 class CmsScreen :
@@ -47,9 +66,10 @@ class CmsScreen :
 	virtual ~CmsScreen ();
 
 	GLScreen *gScreen;
-	std::vector<CmsFunction> cmsFunctions;
-	GLuint lut;
+	boost::ptr_vector<CmsFunction> cmsFunctions;
+	boost::ptr_vector<CmsLut> cmsLut;
 	Atom _ICC_PROFILE;
+	int randrEvent, randrError;
 
 	void
 	optionChanged (CompOption          *opt,
@@ -58,7 +78,12 @@ class CmsScreen :
 	void handleEvent (XEvent *event);
 
 	void
-	setupLUT ();
+	setupOutputLUT (RROutput output);
+
+	void
+	setupLUTs ();
+
+	bool hasPerOutputProfiles();
 
 	GLuint
 	getFragmentFunction (int       target,
