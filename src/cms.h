@@ -30,6 +30,7 @@
 #include <memory>
 
 #include <lcms.h>
+#include <colord.h>
 
 #include "cms_options.h"
 
@@ -48,13 +49,37 @@ struct CmsFunction {
 };
 
 struct CmsLut {
-    CmsLut(CompScreen *screen, RROutput output, cmsHPROFILE profile);
+    CmsLut(cmsHPROFILE profile);
     ~CmsLut();
 
     GLuint texture_id;
+
+    static CmsLut *fromFile(const char *filename);
+    static CmsLut *fromMemory(unsigned char *icc, int len);
+};
+
+struct CmsOutput {
+    CmsOutput(CompScreen *screen, RROutput output);
+    ~CmsOutput();
+
+    CompScreen *screen;
     RROutput output;
-    bool fromOutput;
     CompRect rect;
+    bool connected;
+    CmsLut *lut;
+    bool hasPerOutputProfile;
+    std::string name;
+
+    void setLUT(CmsLut *lut);
+
+    void updateRect();
+    void updateLUT();
+
+    CdDevice *device;
+    void setDevice(CdDevice *);
+    char *getColordProfileFilename();
+    static void onDeviceChange(CdDevice *dev, CmsOutput *out);
+    gulong onDeviceChangeId;
 };
 
 class CmsScreen :
@@ -68,10 +93,16 @@ class CmsScreen :
 	virtual ~CmsScreen ();
 
 	GLScreen *gScreen;
+
 	boost::ptr_vector<CmsFunction> cmsFunctions;
-	boost::ptr_vector<CmsLut> cmsLut;
+	boost::ptr_vector<CmsOutput> cmsOutputs;
+
 	Atom _ICC_PROFILE;
 	int randrEvent, randrError;
+
+	CdClient *cd_client;
+	static void onCdDeviceAdded(CdClient *, CdDevice *, CmsScreen *);
+	static void onCdDeviceRemoved(CdClient *, CdDevice *, CmsScreen *);
 
 	void
 	optionChanged (CompOption          *opt,
@@ -79,14 +110,10 @@ class CmsScreen :
 
 	void handleEvent (XEvent *event);
 
-	CmsLut *setProfile (RROutput output, cmsHPROFILE profile);
-	CmsLut *setProfile (RROutput output, unsigned char *icc, int len);
+	CmsLut *setupOutputLUTFromColord (RROutput output, CdDevice *device);
 
-	void
-	setupOutputLUT (RROutput output);
-
-	void
-	setupLUTs ();
+	void setupOutputs();
+	void setupCdDevice(CmsOutput *output);
 
 	bool hasPerOutputProfiles();
 

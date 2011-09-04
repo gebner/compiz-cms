@@ -4,5 +4,5 @@ include (CompizPlugin)
 
 compiz_plugin (cms
     PLUGINDEPS composite opengl
-    PKGDEPS lcms xrandr
+    PKGDEPS lcms xrandr colord
   )

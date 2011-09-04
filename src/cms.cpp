@@ -28,6 +28,9 @@
 #include <X11/Xatom.h>
 #include <limits.h>
 
+#define compWarning(msg...) \
+    compLogMessage("cms", CompLogLevelWarn, msg)
+
 using namespace GLFragment;
 
 COMPIZ_PLUGIN_20090315 (cms, CmsPluginVTable);
@@ -83,38 +86,9 @@ struct memlut {
     GLushort a[GRIDSIZE][GRIDSIZE][GRIDSIZE][3];
 };
 
-CmsLut::CmsLut (CompScreen *screen, RROutput output, cmsHPROFILE monitorProfile)
-    : texture_id(0), output(output), fromOutput(true)
+CmsLut::CmsLut (cmsHPROFILE monitorProfile)
+    : texture_id(0)
 {
-    // get output rect
-    XRRScreenResources *res = XRRGetScreenResources(
-	screen->dpy(), screen->root());
-    if (!res) {
-	return;
-    }
-
-    XRROutputInfo *outputInfo = XRRGetOutputInfo(
-	screen->dpy(), res, output);
-    if (!outputInfo) {
-	XRRFreeScreenResources(res);
-	return;
-    }
-
-    XRRCrtcInfo *crtcInfo = XRRGetCrtcInfo(
-	screen->dpy(), res, outputInfo->crtc);
-    if (!crtcInfo) {
-	XRRFreeOutputInfo(outputInfo);
-	XRRFreeScreenResources(res);
-	return;
-    }
-
-    rect = CompRect(crtcInfo->x, crtcInfo->y,
-	crtcInfo->width, crtcInfo->height);
-
-    XRRFreeCrtcInfo(crtcInfo);
-    XRRFreeOutputInfo(outputInfo);
-    XRRFreeScreenResources(res);
-
     // populate sampling grid
     std::auto_ptr<memlut> in(new memlut),
 			  out(new memlut);
@@ -163,6 +137,198 @@ CmsLut::~CmsLut() {
     }
 }
 
+CmsLut *CmsLut::fromFile(const char *filename) {
+    cmsHPROFILE profile = cmsOpenProfileFromFile(filename, "r");
+    if (!profile) return 0;
+
+    CmsLut *lut = new CmsLut(profile);
+
+    cmsCloseProfile(profile);
+    
+    return lut;
+}
+
+CmsLut *CmsLut::fromMemory(unsigned char *icc, int len) {
+    cmsHPROFILE profile = cmsOpenProfileFromMem(icc, len);
+    if (!profile) return 0;
+
+    CmsLut *lut = new CmsLut(profile);
+
+    cmsCloseProfile(profile);
+    
+    return lut;
+}
+
+CmsOutput::CmsOutput(CompScreen *screen, RROutput output)
+	: screen(screen), output(output), rect(), connected(false), lut(0), hasPerOutputProfile(true), name(), device(0) {
+    updateRect();
+}
+
+void CmsOutput::setLUT(CmsLut *newLut) {
+    if (lut) {
+	delete lut;
+    }
+    lut = newLut;
+
+    foreach (CompWindow *window, screen->windows()) {
+	CompositeWindow::get(window)->addDamage();
+    }
+}
+
+void CmsOutput::updateRect() {
+    XRRScreenResources *res = XRRGetScreenResources(
+	screen->dpy(), screen->root());
+    if (!res) {
+	return;
+    }
+
+    XRROutputInfo *outputInfo = XRRGetOutputInfo(
+	screen->dpy(), res, output);
+    if (!outputInfo) {
+	XRRFreeScreenResources(res);
+	return;
+    }
+	
+    name = outputInfo->name;
+    connected = outputInfo->connection != RR_Disconnected;
+
+    XRRCrtcInfo *crtcInfo = XRRGetCrtcInfo(
+	screen->dpy(), res, outputInfo->crtc);
+    if (!crtcInfo) {
+	XRRFreeOutputInfo(outputInfo);
+	XRRFreeScreenResources(res);
+	return;
+    }
+
+    rect = CompRect(crtcInfo->x, crtcInfo->y,
+	crtcInfo->width, crtcInfo->height);
+
+    XRRFreeCrtcInfo(crtcInfo);
+    XRRFreeOutputInfo(outputInfo);
+    XRRFreeScreenResources(res);
+}
+
+void CmsOutput::updateLUT() {
+    CmsLut *newLut;
+    unsigned char *icc;
+    Atom type;
+    int format, res;
+    unsigned long len, bytes_left;
+
+    // fetch ICC profile from colord
+    char *filename = getColordProfileFilename();
+    if (filename) {
+	newLut = CmsLut::fromFile(filename);
+	free(filename);
+	if (newLut) {
+	    setLUT(newLut);
+	    return;
+	}
+    }
+
+    // fetch ICC profile from output _ICC_PROFILE property
+    CMS_SCREEN (screen);
+
+    res = XRRGetOutputProperty(screen->dpy(), output,
+	cs->_ICC_PROFILE,
+	0, LONG_MAX,
+	false,
+	false,
+	XA_CARDINAL,
+	&type,
+	&format,
+	&len, &bytes_left,
+	&icc);
+    if (res == Success && len != 0) {
+	CmsLut *newLut = CmsLut::fromMemory(icc, len);
+	XFree(icc);
+
+	if (newLut) {
+	    setLUT(newLut);
+	    return;
+	}
+    }
+    
+    // fetch ICC profile from root _ICC_PROFILE property
+    res = XGetWindowProperty(screen->dpy(), screen->root(),
+	cs->_ICC_PROFILE,
+	0, LONG_MAX,
+	false,
+	XA_CARDINAL,
+	&type,
+	&format,
+	&len, &bytes_left,
+	&icc);
+    if (res == Success && len != 0) {
+	CmsLut *newLut = CmsLut::fromMemory(icc, len);
+	XFree(icc);
+
+	if (newLut) {
+	    hasPerOutputProfile = false;
+	    setLUT(newLut);
+	    return;
+	}
+    }
+
+    // no profile found, so remove lut
+    setLUT(0);
+}
+
+void CmsOutput::setDevice(CdDevice *d) {
+    if (device) {
+	g_signal_handler_disconnect(device, onDeviceChangeId);
+	g_object_unref(device);
+    }
+    device = d;
+
+    if (device) {
+	onDeviceChangeId = g_signal_connect(device, "changed", G_CALLBACK(onDeviceChange), this);
+    }
+}
+
+void CmsOutput::onDeviceChange(CdDevice *dev, CmsOutput *out) {
+    out->updateLUT();
+}
+
+char *CmsOutput::getColordProfileFilename() {
+    if (!device) return 0;
+
+    CdProfile *profile = 0;
+    GError *error = 0;
+    const char *filename;
+    char *ret = 0;
+
+    profile = cd_device_get_default_profile(device);
+    if (!profile) {
+	//compWarning("cannot find profile for colord device with xrandr name '%s'", outputInfo->name);
+	goto cleanup;
+    }
+
+    if (!cd_profile_connect_sync(profile, 0, &error)) {
+	//compWarning("cannot connect to profile for colord device with xrandr name '%s': %s", outputInfo->name, error->message);
+	g_error_free(error);
+	goto cleanup;
+    }
+
+    filename = cd_profile_get_filename(profile);
+    if (!filename) {
+	//compWarning("cannot get filename for profile for colord device with xrandr name '%s'", outputInfo->name);
+	goto cleanup;
+    }
+
+    ret = strdup(filename);
+
+cleanup:
+    if (profile) g_object_unref(profile);
+
+    return ret;
+}
+
+CmsOutput::~CmsOutput() {
+    setLUT(0);
+    setDevice(0);
+}
+
 CmsScreen::CmsScreen (CompScreen *screen) :
     PluginClassHandler <CmsScreen, CompScreen> (screen),
     CmsOptions (),
@@ -178,14 +344,29 @@ CmsScreen::CmsScreen (CompScreen *screen) :
     _ICC_PROFILE = XInternAtom(screen->dpy(), "_ICC_PROFILE", false);
     XRRQueryExtension(screen->dpy(), &randrEvent, &randrError);
 
-    setupLUTs();
-
     XRRSelectInput(screen->dpy(), screen->root(),
 	RROutputPropertyNotifyMask | RROutputChangeNotifyMask);
     screen->handleEventSetEnabled (this, true);
+
+    GError *error = 0;
+    cd_client = cd_client_new();
+    if (!cd_client_connect_sync(cd_client, 0, &error)) {
+	compWarning("cannot connect to colord: %s", error->message);
+	g_error_free(error);
+	g_object_unref(cd_client);
+	cd_client = 0;
+    } else {
+	g_signal_connect(cd_client, "device-added", G_CALLBACK(onCdDeviceAdded), this);
+	g_signal_connect(cd_client, "device-removed", G_CALLBACK(onCdDeviceRemoved), this);
+    }
+
+    setupOutputs();
 }
 
-CmsScreen::~CmsScreen () {}
+CmsScreen::~CmsScreen ()
+{
+    if (cd_client) g_object_unref(cd_client);
+}
 
 void
 CmsScreen::optionChanged (CompOption          *opt,
@@ -218,11 +399,8 @@ CmsScreen::handleEvent (XEvent *event)
 	    && event->xproperty.window == screen->root()
 	    && event->xproperty.atom == _ICC_PROFILE) {
 	if (!hasPerOutputProfiles()) {
-	    setupLUTs();
-
-	    foreach (CompWindow *window, screen->windows())
-	    {
-		CompositeWindow::get(window)->addDamage();
+	    foreach (CmsOutput& output, cmsOutputs) {
+		output.updateLUT();
 	    }
 	}
     } else if (event->type == randrEvent + RRNotify
@@ -230,117 +408,67 @@ CmsScreen::handleEvent (XEvent *event)
 	XRROutputPropertyNotifyEvent *ev =
 	    (XRROutputPropertyNotifyEvent *) event;
 	if (ev->property == _ICC_PROFILE) {
-	    setupOutputLUT(ev->output);
-
-	    foreach (CompWindow *window, screen->windows())
-	    {
-		CompositeWindow::get(window)->addDamage();
+	    foreach (CmsOutput& output, cmsOutputs) {
+		if (output.output == ev->output) {
+		    output.updateRect();
+		    output.updateLUT();
+		}
 	    }
 	}
     } else if (event->type == randrEvent + RRNotify
 	    && ((XRRNotifyEvent *) event)->subtype == RRNotify_OutputChange) {
 	XRROutputChangeNotifyEvent *ev =
 	    (XRROutputChangeNotifyEvent *) event;
-
-	setupOutputLUT(ev->output);
-
-	foreach (CompWindow *window, screen->windows())
-	{
-	    CompositeWindow::get(window)->addDamage();
+	
+	foreach (CmsOutput& output, cmsOutputs) {
+	    if (output.output == ev->output) {
+		output.updateRect();
+		output.updateLUT();
+	    }
 	}
     }
 }
 
-CmsLut *
-CmsScreen::setProfile (RROutput output, cmsHPROFILE profile)
-{
-    for (boost::ptr_vector<CmsLut>::iterator it = cmsLut.begin();
-	    it != cmsLut.end(); ++it) {
-	if (it->output == output) {
-	    cmsLut.erase(it);
-	    break;
-	}
+void CmsScreen::onCdDeviceAdded(CdClient *, CdDevice *device, CmsScreen *cs) {
+    GError *error;
+    if (!cd_device_connect_sync(device, 0, &error)) {
+	//compWarning("cannot connect to profile for colord device with xrandr name '%s': %s", outputInfo->name, error->message);
+	g_error_free(error);
+	g_object_unref(device);
+	return;
     }
 
-    if (profile == 0) return 0;
-
-    CmsLut *lut = new CmsLut(screen, output, profile);
-    if (lut->texture_id != 0) {
-	cmsLut.push_back(lut);
-    } else {
-	delete lut;
-	lut = 0;
-    }
-
-    return lut;
-}
-
-CmsLut *
-CmsScreen::setProfile (RROutput output, unsigned char *icc, int len)
-{
-    cmsHPROFILE profile = cmsOpenProfileFromMem(icc, len);
-    if (profile == 0) return 0;
-    
-    CmsLut *lut = setProfile(output, profile);
-
-    cmsCloseProfile(profile);
-    return lut;
-}
-
-void
-CmsScreen::setupOutputLUT (RROutput output)
-{
-    unsigned char *icc;
-    Atom type;
-    int format, res;
-    unsigned long len, bytes_left;
-
-    // fetch ICC profile from output _ICC_PROFILE property
-    res = XRRGetOutputProperty(screen->dpy(), output,
-	_ICC_PROFILE,
-	0, LONG_MAX,
-	false,
-	false,
-	XA_CARDINAL,
-	&type,
-	&format,
-	&len, &bytes_left,
-	&icc);
-    if (res == Success && len != 0) {
-	CmsLut *lut = setProfile(output, icc, len);
-	XFree(icc);
-
-	if (lut != 0) {
-	    return;
-	}
-    }
-    
-    // fetch ICC profile from root _ICC_PROFILE property
-    res = XGetWindowProperty(screen->dpy(), screen->root(),
-	_ICC_PROFILE,
-	0, LONG_MAX,
-	false,
-	XA_CARDINAL,
-	&type,
-	&format,
-	&len, &bytes_left,
-	&icc);
-    if (res == Success && len != 0) {
-	CmsLut *lut = setProfile(output, icc, len);
-	XFree(icc);
-
-	if (lut != 0) {
-	    lut->fromOutput = false;
+    const char *name = cd_device_get_metadata_item(device, CD_DEVICE_METADATA_XRANDR_NAME);
+    foreach (CmsOutput& output, cs->cmsOutputs) {
+	if (output.name == name) {
+	    output.setDevice(device);
 	    return;
 	}
     }
 
-    // no profile found, so remove lut
-    setProfile(output, 0);
+    compWarning("could not find output for colord device: %s",
+	cd_device_get_object_path(device));
+    g_object_unref(device);
+}
+
+void CmsScreen::onCdDeviceRemoved(CdClient *, CdDevice *device, CmsScreen *cs) {
+    foreach (CmsOutput& output, cs->cmsOutputs) {
+	if (output.device) {
+	    if (!strcmp(cd_device_get_object_path(device),
+		    cd_device_get_object_path(output.device))) {
+		output.setDevice(0);
+		return;
+	    }
+	}
+    }
+
+    compWarning("could not find output for removed colord device: %s",
+	cd_device_get_object_path(device));
+    g_object_unref(device);
 }
 
 void
-CmsScreen::setupLUTs () {
+CmsScreen::setupOutputs () {
     if (!screen->XRandr()) return;
 
     XRRScreenResources *res =
@@ -348,20 +476,47 @@ CmsScreen::setupLUTs () {
     if (!res) return;
 
     for (int i = 0; i < res->noutput; i++) {
-	setupOutputLUT(res->outputs[i]);
+	CmsOutput *output = new CmsOutput(screen, res->outputs[i]);
+	setupCdDevice(output);
+	output->updateLUT();
+	cmsOutputs.push_back(output);
     }
 
     XRRFreeScreenResources(res);
 }
 
+void
+CmsScreen::setupCdDevice(CmsOutput *output) {
+    if (!cd_client) return;
+
+    if (!output->connected) return;
+
+    GError *error = 0;
+    CdDevice *device = cd_client_find_device_by_property_sync(
+	cd_client, CD_DEVICE_METADATA_XRANDR_NAME, output->name.c_str(),
+	0, &error);
+    if (!device) {
+	return;
+    }
+
+    if (!cd_device_connect_sync(device, 0, &error)) {
+	compWarning("could not connect to colord device %s: %s",
+	    cd_device_get_object_path(device), error->message);
+	g_object_unref(device);
+	return;
+    }
+
+    output->setDevice(device);
+}
+
 bool
 CmsScreen::hasPerOutputProfiles () {
-    foreach (CmsLut& lut, cmsLut) {
-	if (lut.fromOutput) {
-	    return true;
+    foreach (CmsOutput& output, cmsOutputs) {
+	if (!output.hasPerOutputProfile) {
+	    return false;
 	}
     }
-    return false;
+    return true;
 }
 
 GLuint
@@ -433,9 +588,9 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 
     if (doCms) {
 	CompRect borderRect = window->borderRect();
-	foreach (CmsLut& l, cs->cmsLut) {
-	    if (borderRect.intersects(l.rect)) {
-		lut = &l;
+	foreach (CmsOutput& out, cs->cmsOutputs) {
+	    if (borderRect.intersects(out.rect) && out.lut) {
+		lut = out.lut;
 		break;
 	    }
 	}
