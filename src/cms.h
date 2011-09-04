@@ -110,8 +110,6 @@ class CmsScreen :
 
 	void handleEvent (XEvent *event);
 
-	CmsLut *setupOutputLUTFromColord (RROutput output, CdDevice *device);
-
 	void setupOutputs();
 	void setupCdDevice(CmsOutput *output);
 
