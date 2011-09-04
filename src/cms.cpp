@@ -83,8 +83,8 @@ struct memlut {
     GLushort a[GRIDSIZE][GRIDSIZE][GRIDSIZE][3];
 };
 
-CmsLut::CmsLut (CompScreen *screen, RROutput output, unsigned char *icc, int len, bool fromOutput)
-    : texture_id(0), output(output), fromOutput(output)
+CmsLut::CmsLut (CompScreen *screen, RROutput output, cmsHPROFILE monitorProfile)
+    : texture_id(0), output(output), fromOutput(true)
 {
     // get output rect
     XRRScreenResources *res = XRRGetScreenResources(
@@ -115,9 +115,6 @@ CmsLut::CmsLut (CompScreen *screen, RROutput output, unsigned char *icc, int len
     XRRFreeOutputInfo(outputInfo);
     XRRFreeScreenResources(res);
 
-    // make profile
-    cmsHPROFILE outputProfile = cmsOpenProfileFromMem(icc, len);
-
     // populate sampling grid
     std::auto_ptr<memlut> in(new memlut),
 			  out(new memlut);
@@ -136,7 +133,7 @@ CmsLut::CmsLut (CompScreen *screen, RROutput output, unsigned char *icc, int len
     cmsHPROFILE inputProfile = cmsCreate_sRGBProfile();
     cmsHTRANSFORM transf = cmsCreateTransform(
 	inputProfile, TYPE_RGB_16,
-	outputProfile, TYPE_RGB_16,
+	monitorProfile, TYPE_RGB_16,
 	INTENT_PERCEPTUAL,
 	cmsFLAGS_NOTPRECALC);
 
@@ -144,7 +141,6 @@ CmsLut::CmsLut (CompScreen *screen, RROutput output, unsigned char *icc, int len
 
     cmsDeleteTransform(transf);
     cmsCloseProfile(inputProfile);
-    cmsCloseProfile(outputProfile);
 
     // save into a texture
     glGenTextures(1, &texture_id);
@@ -255,8 +251,8 @@ CmsScreen::handleEvent (XEvent *event)
     }
 }
 
-void
-CmsScreen::setupOutputLUT (RROutput output)
+CmsLut *
+CmsScreen::setProfile (RROutput output, cmsHPROFILE profile)
 {
     for (boost::ptr_vector<CmsLut>::iterator it = cmsLut.begin();
 	    it != cmsLut.end(); ++it) {
@@ -266,13 +262,40 @@ CmsScreen::setupOutputLUT (RROutput output)
 	}
     }
 
-    bool fromOutput = true;
+    if (profile == 0) return 0;
 
-    // fetch ICC profile
+    CmsLut *lut = new CmsLut(screen, output, profile);
+    if (lut->texture_id != 0) {
+	cmsLut.push_back(lut);
+    } else {
+	delete lut;
+	lut = 0;
+    }
+
+    return lut;
+}
+
+CmsLut *
+CmsScreen::setProfile (RROutput output, unsigned char *icc, int len)
+{
+    cmsHPROFILE profile = cmsOpenProfileFromMem(icc, len);
+    if (profile == 0) return 0;
+    
+    CmsLut *lut = setProfile(output, profile);
+
+    cmsCloseProfile(profile);
+    return lut;
+}
+
+void
+CmsScreen::setupOutputLUT (RROutput output)
+{
     unsigned char *icc;
     Atom type;
     int format, res;
     unsigned long len, bytes_left;
+
+    // fetch ICC profile from output _ICC_PROFILE property
     res = XRRGetOutputProperty(screen->dpy(), output,
 	_ICC_PROFILE,
 	0, LONG_MAX,
@@ -283,31 +306,37 @@ CmsScreen::setupOutputLUT (RROutput output)
 	&format,
 	&len, &bytes_left,
 	&icc);
-    if (res != Success || len == 0) {
+    if (res == Success && len != 0) {
+	CmsLut *lut = setProfile(output, icc, len);
 	XFree(icc);
 
-	fromOutput = false;
-	res = XGetWindowProperty(screen->dpy(), screen->root(),
-	    _ICC_PROFILE,
-	    0, LONG_MAX,
-	    false,
-	    XA_CARDINAL,
-	    &type,
-	    &format,
-	    &len, &bytes_left,
-	    &icc);
-	if (res != Success || len == 0) {
-	    XFree(icc);
+	if (lut != 0) {
+	    return;
+	}
+    }
+    
+    // fetch ICC profile from root _ICC_PROFILE property
+    res = XGetWindowProperty(screen->dpy(), screen->root(),
+	_ICC_PROFILE,
+	0, LONG_MAX,
+	false,
+	XA_CARDINAL,
+	&type,
+	&format,
+	&len, &bytes_left,
+	&icc);
+    if (res == Success && len != 0) {
+	CmsLut *lut = setProfile(output, icc, len);
+	XFree(icc);
+
+	if (lut != 0) {
+	    lut->fromOutput = false;
 	    return;
 	}
     }
 
-    CmsLut *lut = new CmsLut(screen, output, icc, len, fromOutput);
-    if (lut->texture_id != 0) {
-	cmsLut.push_back(lut);
-    } else {
-	delete lut;
-    }
+    // no profile found, so remove lut
+    setProfile(output, 0);
 }
 
 void

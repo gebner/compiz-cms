@@ -29,6 +29,8 @@
 #include <boost/ptr_container/ptr_vector.hpp>
 #include <memory>
 
+#include <lcms.h>
+
 #include "cms_options.h"
 
 struct CmsFunction {
@@ -46,7 +48,7 @@ struct CmsFunction {
 };
 
 struct CmsLut {
-    CmsLut(CompScreen *screen, RROutput output, unsigned char *icc, int len, bool fromOutput);
+    CmsLut(CompScreen *screen, RROutput output, cmsHPROFILE profile);
     ~CmsLut();
 
     GLuint texture_id;
@@ -76,6 +78,9 @@ class CmsScreen :
 		       CmsOptions::Options num);
 
 	void handleEvent (XEvent *event);
+
+	CmsLut *setProfile (RROutput output, cmsHPROFILE profile);
+	CmsLut *setProfile (RROutput output, unsigned char *icc, int len);
 
 	void
 	setupOutputLUT (RROutput output);
