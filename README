@@ -1,14 +1,14 @@
 A color management plugin for compiz 0.9.
 
-Dependencies are only compiz and lcms.  The ICC profile is retrieved using the
-_ICC_PROFILE atom as set by gnome-color-manager.  Compiz-style window
-exclusions are supported.
+Dependencies are only compiz, lcms and libcolord.  The ICC profile is retrieved
+using colord or the _ICC_PROFILE atom as set by gnome-color-manager.
+Compiz-style window exclusions are supported.
 
 This plugin is based on code from the compicc plugin by Kai-Uwe Behrmann:
 http://compicc.sf.net/
 
 To install:
-$ sudo apt-get install cmake compiz-dev liblcms1-dev libboost-serialization-dev
+$ sudo apt-get install cmake compiz-dev liblcms1-dev libboost-serialization-dev libxrandr-dev libcolord-dev
 $ git clone https://github.com/gebner/compiz-cms.git
 $ mkdir compiz-cms/build
 $ cd compiz-cms/build
