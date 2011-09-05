@@ -35,10 +35,7 @@
 #include "cms_options.h"
 
 struct CmsFunction {
-    CmsFunction (int       target,
-		 bool      alpha,
-		 int       param,
-		 int       unit);
+    CmsFunction(int target, bool alpha, int param, int unit);
     ~CmsFunction();
 
     GLFragment::FunctionId id;
@@ -83,79 +80,68 @@ struct CmsOutput {
 };
 
 class CmsScreen :
-    public PluginClassHandler <CmsScreen, CompScreen>,
+    public PluginClassHandler<CmsScreen, CompScreen>,
     public ScreenInterface,
     public CmsOptions
 {
-    public:
+public:
 
-	CmsScreen (CompScreen *);
-	virtual ~CmsScreen ();
+    CmsScreen(CompScreen *);
+    virtual ~CmsScreen();
 
-	GLScreen *gScreen;
+    GLScreen *gScreen;
 
-	boost::ptr_vector<CmsFunction> cmsFunctions;
-	boost::ptr_vector<CmsOutput> cmsOutputs;
+    boost::ptr_vector<CmsFunction> cmsFunctions;
+    boost::ptr_vector<CmsOutput> cmsOutputs;
 
-	Atom _ICC_PROFILE;
-	int randrEvent, randrError;
+    Atom _ICC_PROFILE;
+    int randrEvent, randrError;
 
-	CdClient *cd_client;
-	static void onCdDeviceAdded(CdClient *, CdDevice *, CmsScreen *);
-	static void onCdDeviceRemoved(CdClient *, CdDevice *, CmsScreen *);
+    CdClient *cd_client;
+    static void onCdDeviceAdded(CdClient *, CdDevice *, CmsScreen *);
+    static void onCdDeviceRemoved(CdClient *, CdDevice *, CmsScreen *);
 
-	void
-	optionChanged (CompOption          *opt,
-		       CmsOptions::Options num);
+    void optionChanged(CompOption *opt, CmsOptions::Options num);
+    void handleEvent(XEvent *event);
 
-	void handleEvent (XEvent *event);
+    void setupOutputs();
+    void setupCdDevice(CmsOutput *output);
 
-	void setupOutputs();
-	void setupCdDevice(CmsOutput *output);
+    bool hasPerOutputProfiles();
 
-	bool hasPerOutputProfiles();
-
-	GLuint
-	getFragmentFunction (int       target,
-			     bool      alpha,
-			     int       param,
-			     int       unit);
+    GLuint getFragmentFunction(int target, bool alpha, int param, int unit);
 };
 
 class CmsWindow :
-    public PluginClassHandler <CmsWindow, CompWindow>,
+    public PluginClassHandler<CmsWindow, CompWindow>,
     public GLWindowInterface
 {
-    public:
+public:
 
-	CmsWindow (CompWindow *);
-	~CmsWindow ();
+    CmsWindow(CompWindow *);
+    ~CmsWindow();
 
-	CompWindow      *window;
-	CompositeWindow *cWindow;
-	GLWindow        *gWindow;
+    CompWindow      *window;
+    CompositeWindow *cWindow;
+    GLWindow        *gWindow;
 
-	bool isCms;
+    bool isCms;
 
-	void
-	updateMatch ();
+    void updateMatch();
 
-	void
-	glDrawTexture(GLTexture          *texture,
-		      GLFragment::Attrib &attrib,
-		      unsigned int       mask);
+    void glDrawTexture(GLTexture *texture, GLFragment::Attrib &attrib, unsigned mask);
 };
 
 #define CMS_SCREEN(s)							      \
-    CmsScreen *cs = CmsScreen::get (s);
+    CmsScreen *cs = CmsScreen::get(s);
 
 #define CMS_WINDOW(w)							      \
-    CmsWindow *cw = CmsWindow::get (w);
+    CmsWindow *cw = CmsWindow::get(w);
 
 class CmsPluginVTable :
-    public CompPlugin::VTableForScreenAndWindow <CmsScreen, CmsWindow>
+    public CompPlugin::VTableForScreenAndWindow<CmsScreen, CmsWindow>
 {
-    public:
+public:
 
-	bool init ();
+    bool init();
 };

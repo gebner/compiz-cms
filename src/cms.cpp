@@ -35,42 +35,35 @@ using namespace GLFragment;
 
 COMPIZ_PLUGIN_20090315 (cms, CmsPluginVTable);
 
-CmsFunction::CmsFunction (int	  target,
-			  bool    alpha,
-			  int	  param,
-			  int	  unit)
-    : id(0), alpha(alpha), target(target), param(param), unit(unit)
-{
+CmsFunction::CmsFunction(int target, bool alpha, int param, int unit)
+        : id(0), alpha(alpha), target(target), param(param), unit(unit) {
     FunctionData data;
 
-    if (alpha)
-    {
-      data.addTempHeaderOp ("temp");
+    if (alpha) {
+      data.addTempHeaderOp("temp");
     }
 
-    data.addFetchOp ("output", NULL, target);
+    data.addFetchOp("output", NULL, target);
 
-    if (alpha)
-    {
-	data.addDataOp ("MUL output.rgb, output.a, output;");
-	data.addDataOp ("MUL temp.a, output.a, output.a;");
+    if (alpha) {
+	data.addDataOp("MUL output.rgb, output.a, output;");
+	data.addDataOp("MUL temp.a, output.a, output.a;");
     }
 
-    data.addDataOp ("MAD output, output, program.env[%d], program.env[%d];", param, param + 1);
+    data.addDataOp("MAD output, output, program.env[%d], program.env[%d];", param, param + 1);
 
-    data.addDataOp ("TEX output, output, texture[%d], 3D;", unit);
+    data.addDataOp("TEX output, output, texture[%d], 3D;", unit);
 
-    if (alpha)
-    {
-	data.addDataOp ("MUL output, temp.a, output;");
+    if (alpha) {
+	data.addDataOp("MUL output, temp.a, output;");
     }
 
-    data.addColorOp ("output", "output");
+    data.addColorOp("output", "output");
 
-    if (!data.status ()) {
+    if (!data.status()) {
 	id = 0;
     } else {
-	id = data.createFragmentFunction ("cms");
+	id = data.createFragmentFunction("cms");
     }
 }
 
@@ -86,9 +79,7 @@ struct memlut {
     GLushort a[GRIDSIZE][GRIDSIZE][GRIDSIZE][3];
 };
 
-CmsLut::CmsLut (cmsHPROFILE monitorProfile)
-    : texture_id(0)
-{
+CmsLut::CmsLut(cmsHPROFILE monitorProfile) : texture_id(0) {
     // populate sampling grid
     std::auto_ptr<memlut> in(new memlut),
 			  out(new memlut);
@@ -160,7 +151,8 @@ CmsLut *CmsLut::fromMemory(unsigned char *icc, int len) {
 }
 
 CmsOutput::CmsOutput(CompScreen *screen, RROutput output)
-	: screen(screen), output(output), rect(), connected(false), lut(0), hasPerOutputProfile(true), name(), device(0) {
+	: screen(screen), output(output), rect(), connected(false),
+	lut(0), hasPerOutputProfile(true), name(), device(0) {
     updateRect();
 }
 
@@ -293,35 +285,33 @@ void CmsOutput::onDeviceChange(CdDevice *dev, CmsOutput *out) {
 char *CmsOutput::getColordProfileFilename() {
     if (!device) return 0;
 
-    CdProfile *profile = 0;
-    GError *error = 0;
-    const char *filename;
-    char *ret = 0;
-
-    profile = cd_device_get_default_profile(device);
+    CdProfile *profile = cd_device_get_default_profile(device);
     if (!profile) {
-	//compWarning("cannot find profile for colord device with xrandr name '%s'", outputInfo->name);
-	goto cleanup;
+	compWarning("cannot find profile for colord device %s (%s)",
+	    cd_device_get_object_path(device), name.c_str());
+	return 0;
     }
 
+    GError *error = 0;
     if (!cd_profile_connect_sync(profile, 0, &error)) {
-	//compWarning("cannot connect to profile for colord device with xrandr name '%s': %s", outputInfo->name, error->message);
+	compWarning("cannot connect to profile %s for colord device %s (%s)",
+	    cd_profile_get_object_path(profile), cd_device_get_object_path(device), name.c_str());
 	g_error_free(error);
-	goto cleanup;
+	g_object_unref(profile);
+	return 0;
     }
 
-    filename = cd_profile_get_filename(profile);
+    const char *filename = cd_profile_get_filename(profile);
     if (!filename) {
-	//compWarning("cannot get filename for profile for colord device with xrandr name '%s'", outputInfo->name);
-	goto cleanup;
+	compWarning("cannot get filename for profile %s for colord device %s (%s)",
+	    cd_profile_get_object_path(profile), cd_device_get_object_path(device), name.c_str());
+	g_object_unref(profile);
+	return 0;
     }
 
-    ret = strdup(filename);
-
-cleanup:
-    if (profile) g_object_unref(profile);
-
-    return ret;
+    char *copy = strdup(filename);
+    g_object_unref(profile);
+    return copy;
 }
 
 CmsOutput::~CmsOutput() {
@@ -329,24 +319,21 @@ CmsOutput::~CmsOutput() {
     setDevice(0);
 }
 
-CmsScreen::CmsScreen (CompScreen *screen) :
-    PluginClassHandler <CmsScreen, CompScreen> (screen),
-    CmsOptions (),
-    gScreen (GLScreen::get (screen))
-{
-    ScreenInterface::setHandler (screen, false);
+CmsScreen::CmsScreen(CompScreen *screen) :
+	PluginClassHandler<CmsScreen, CompScreen>(screen),
+	CmsOptions(),
+	gScreen(GLScreen::get(screen)) {
+    ScreenInterface::setHandler(screen, false);
 
-    optionSetExcludeMatchNotify (
-	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
-    optionSetDecorationsNotify (
-	boost::bind (&CmsScreen::optionChanged, this, _1, _2));
+    optionSetExcludeMatchNotify(boost::bind(&CmsScreen::optionChanged, this, _1, _2));
+    optionSetDecorationsNotify( boost::bind(&CmsScreen::optionChanged, this, _1, _2));
 
     _ICC_PROFILE = XInternAtom(screen->dpy(), "_ICC_PROFILE", false);
     XRRQueryExtension(screen->dpy(), &randrEvent, &randrError);
 
     XRRSelectInput(screen->dpy(), screen->root(),
 	RROutputPropertyNotifyMask | RROutputChangeNotifyMask);
-    screen->handleEventSetEnabled (this, true);
+    screen->handleEventSetEnabled(this, true);
 
     GError *error = 0;
     cd_client = cd_client_new();
@@ -355,7 +342,9 @@ CmsScreen::CmsScreen (CompScreen *screen) :
 	g_error_free(error);
 	g_object_unref(cd_client);
 	cd_client = 0;
-    } else {
+    }
+
+    if (cd_client) {
 	g_signal_connect(cd_client, "device-added", G_CALLBACK(onCdDeviceAdded), this);
 	g_signal_connect(cd_client, "device-removed", G_CALLBACK(onCdDeviceRemoved), this);
     }
@@ -363,36 +352,25 @@ CmsScreen::CmsScreen (CompScreen *screen) :
     setupOutputs();
 }
 
-CmsScreen::~CmsScreen ()
-{
+CmsScreen::~CmsScreen() {
     if (cd_client) g_object_unref(cd_client);
 }
 
-void
-CmsScreen::optionChanged (CompOption          *opt,
-			  CmsOptions::Options num)
-{
-    switch (num)
-    {
+void CmsScreen::optionChanged(CompOption *opt, CmsOptions::Options num) {
+    switch (num) {
     case CmsOptions::Decorations:
-    case CmsOptions::ExcludeMatch:
-	{
-	    foreach (CompWindow *w, screen->windows ())
-	    {
-		CMS_WINDOW (w);
-
-		cw->updateMatch ();
-	    }
+    case CmsOptions::ExcludeMatch: {
+	foreach (CompWindow *w, screen->windows()) {
+	    CMS_WINDOW (w);
+	    cw->updateMatch ();
 	}
 	break;
-    default:
-	break;
+    }
+    default: break;
     }
 }
 
-void
-CmsScreen::handleEvent (XEvent *event)
-{
+void CmsScreen::handleEvent(XEvent *event) {
     screen->handleEvent (event);
 
     if (event->type == PropertyNotify
@@ -432,7 +410,8 @@ CmsScreen::handleEvent (XEvent *event)
 void CmsScreen::onCdDeviceAdded(CdClient *, CdDevice *device, CmsScreen *cs) {
     GError *error;
     if (!cd_device_connect_sync(device, 0, &error)) {
-	//compWarning("cannot connect to profile for colord device with xrandr name '%s': %s", outputInfo->name, error->message);
+	compWarning("cannot connect to colord device %s: %s",
+	    cd_device_get_object_path(device), error->message);
 	g_error_free(error);
 	g_object_unref(device);
 	return;
@@ -467,8 +446,7 @@ void CmsScreen::onCdDeviceRemoved(CdClient *, CdDevice *device, CmsScreen *cs) {
     g_object_unref(device);
 }
 
-void
-CmsScreen::setupOutputs () {
+void CmsScreen::setupOutputs() {
     if (!screen->XRandr()) return;
 
     XRRScreenResources *res =
@@ -485,8 +463,7 @@ CmsScreen::setupOutputs () {
     XRRFreeScreenResources(res);
 }
 
-void
-CmsScreen::setupCdDevice(CmsOutput *output) {
+void CmsScreen::setupCdDevice(CmsOutput *output) {
     if (!cd_client) return;
 
     if (!output->connected) return;
@@ -509,8 +486,7 @@ CmsScreen::setupCdDevice(CmsOutput *output) {
     output->setDevice(device);
 }
 
-bool
-CmsScreen::hasPerOutputProfiles () {
+bool CmsScreen::hasPerOutputProfiles() {
     foreach (CmsOutput& output, cmsOutputs) {
 	if (!output.hasPerOutputProfile) {
 	    return false;
@@ -519,16 +495,9 @@ CmsScreen::hasPerOutputProfiles () {
     return true;
 }
 
-GLuint
-CmsScreen::getFragmentFunction (int	  target,
-				bool      alpha,
-				int	  param,
-				int	  unit)
-{
-    foreach (CmsFunction& f, cmsFunctions)
-    {
-	if (f.alpha == alpha && f.target == target && f.param == param && f.unit == unit)
-	{
+GLuint CmsScreen::getFragmentFunction(int target, bool alpha, int param, int unit) {
+    foreach (CmsFunction& f, cmsFunctions) {
+	if (f.alpha == alpha && f.target == target && f.param == param && f.unit == unit) {
 	    return f.id;
 	}
     }
@@ -540,50 +509,40 @@ CmsScreen::getFragmentFunction (int	  target,
     return f->id;
 }
 
-CmsWindow::CmsWindow (CompWindow *window) :
-    PluginClassHandler <CmsWindow, CompWindow> (window),
-    window (window),
-    cWindow (CompositeWindow::get (window)),
-    gWindow (GLWindow::get (window)),
-    isCms (false)
-{
-    GLWindowInterface::setHandler (gWindow, true);
+CmsWindow::CmsWindow(CompWindow *window) :
+	PluginClassHandler<CmsWindow, CompWindow>(window),
+	window(window),
+	cWindow(CompositeWindow::get(window)),
+	gWindow(GLWindow::get(window)),
+	isCms(false) {
+    GLWindowInterface::setHandler(gWindow, true);
 
-    updateMatch ();
+    updateMatch();
 }
 
-CmsWindow::~CmsWindow ()
-{
+CmsWindow::~CmsWindow() {}
+
+void CmsWindow::updateMatch() {
+    CMS_SCREEN(screen);
+
+    isCms = !cs->optionGetExcludeMatch().evaluate(window);
+
+    cWindow->addDamage();
 }
 
-void
-CmsWindow::updateMatch ()
-{
-    CMS_SCREEN (screen);
-
-    isCms = !cs->optionGetExcludeMatch ().evaluate (window);
-
-    cWindow->addDamage ();
-}
-
-void
-CmsWindow::glDrawTexture (GLTexture          *texture,
-			  GLFragment::Attrib &attrib,
-			  unsigned int       mask)
-{
-    CMS_SCREEN (screen);
+void CmsWindow::glDrawTexture(GLTexture *texture,
+	GLFragment::Attrib &attrib, unsigned mask) {
+    CMS_SCREEN(screen);
 
     bool isDecoration = true;
-    foreach (GLTexture *tex, gWindow->textures ())
-    {
-	if (texture == tex)
-	{
+    foreach (GLTexture *tex, gWindow->textures()) {
+	if (texture == tex) {
 	    isDecoration = false;
 	    break;
 	}
     }
 
-    bool doCms = isDecoration ? cs->optionGetDecorations () : isCms;
+    bool doCms = isDecoration ? cs->optionGetDecorations() : isCms;
     CmsLut *lut = 0;
 
     if (doCms) {
@@ -596,22 +555,21 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 	}
     }
 
-    if (lut && doCms && GL::fragmentProgram)
-    {
+    if (lut && doCms && GL::fragmentProgram) {
 	GLFragment::Attrib fa = attrib;
 
 	bool alpha = isDecoration || window->alpha();
 
 	int target;
-	if (texture->target () == GL_TEXTURE_2D)
+	if (texture->target() == GL_TEXTURE_2D)
 	    target = COMP_FETCH_TARGET_2D;
 	else
 	    target = COMP_FETCH_TARGET_RECT;
 
 	int param = fa.allocParameters(2);
 	int unit = fa.allocTextureUnits(1);
-	GLuint function = cs->getFragmentFunction (target, alpha, param, unit);
-	fa.addFunction (function);
+	GLuint function = cs->getFragmentFunction(target, alpha, param, unit);
+	fa.addFunction(function);
 
 	GLfloat scale = (GLfloat) (GRIDSIZE - 1) / GRIDSIZE;
 	GLfloat offset = (GLfloat) 1.0 / (2 * GRIDSIZE);
@@ -621,26 +579,22 @@ CmsWindow::glDrawTexture (GLTexture          *texture,
 	GL::programEnvParameter4f( GL_FRAGMENT_PROGRAM_ARB, param + 1,
 		offset, offset, offset, 0.0);
 
-	GL::activeTexture (GL_TEXTURE0_ARB + unit);
+	GL::activeTexture(GL_TEXTURE0_ARB + unit);
 	glBindTexture(GL_TEXTURE_3D, lut->texture_id);
-	GL::activeTexture (GL_TEXTURE0_ARB);
+	GL::activeTexture(GL_TEXTURE0_ARB);
 
-	gWindow->glDrawTexture (texture, fa, mask);
-    }
-    else
-    {
+	gWindow->glDrawTexture(texture, fa, mask);
+    } else {
 	/* no cms */
-	gWindow->glDrawTexture (texture, attrib, mask);
+	gWindow->glDrawTexture(texture, attrib, mask);
     }
 }
 
 
-bool
-CmsPluginVTable::init ()
-{
-    if (!CompPlugin::checkPluginABI ("core", CORE_ABIVERSION) ||
-	!CompPlugin::checkPluginABI ("composite", COMPIZ_COMPOSITE_ABI) ||
-	!CompPlugin::checkPluginABI ("opengl", COMPIZ_OPENGL_ABI))
+bool CmsPluginVTable::init() {
+    if (!CompPlugin::checkPluginABI("core", CORE_ABIVERSION) ||
+	!CompPlugin::checkPluginABI("composite", COMPIZ_COMPOSITE_ABI) ||
+	!CompPlugin::checkPluginABI("opengl", COMPIZ_OPENGL_ABI))
 	return false;
 
     return true;
