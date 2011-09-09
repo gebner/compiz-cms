@@ -413,13 +413,13 @@ void CmsScreen::onCdDeviceAdded(CdClient *, CdDevice *device, CmsScreen *cs) {
 	compWarning("cannot connect to colord device %s: %s",
 	    cd_device_get_object_path(device), error->message);
 	g_error_free(error);
-	g_object_unref(device);
 	return;
     }
 
     const char *name = cd_device_get_metadata_item(device, CD_DEVICE_METADATA_XRANDR_NAME);
     foreach (CmsOutput& output, cs->cmsOutputs) {
 	if (output.name == name) {
+	    g_object_ref(device);
 	    output.setDevice(device);
 	    return;
 	}
@@ -427,7 +427,6 @@ void CmsScreen::onCdDeviceAdded(CdClient *, CdDevice *device, CmsScreen *cs) {
 
     compWarning("could not find output for colord device: %s",
 	cd_device_get_object_path(device));
-    g_object_unref(device);
 }
 
 void CmsScreen::onCdDeviceRemoved(CdClient *, CdDevice *device, CmsScreen *cs) {
@@ -443,7 +442,6 @@ void CmsScreen::onCdDeviceRemoved(CdClient *, CdDevice *device, CmsScreen *cs) {
 
     compWarning("could not find output for removed colord device: %s",
 	cd_device_get_object_path(device));
-    g_object_unref(device);
 }
 
 void CmsScreen::setupOutputs() {
