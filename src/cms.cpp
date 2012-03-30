@@ -296,7 +296,7 @@ char *CmsOutput::getColordProfileFilename() {
     if (!cd_profile_connect_sync(profile, 0, &error)) {
 	compWarning("cannot connect to profile %s for colord device %s (%s)",
 	    cd_profile_get_object_path(profile), cd_device_get_object_path(device), name.c_str());
-	g_error_free(error);
+	g_clear_error(&error);
 	g_object_unref(profile);
 	return 0;
     }
@@ -338,8 +338,8 @@ CmsScreen::CmsScreen(CompScreen *screen) :
     GError *error = 0;
     cd_client = cd_client_new();
     if (!cd_client_connect_sync(cd_client, 0, &error)) {
-	compWarning("cannot connect to colord: %s", error->message);
-	g_error_free(error);
+	compWarning("cannot connect to colord: %s", error ? error->message : "(null)");
+	g_clear_error(&error);
 	g_object_unref(cd_client);
 	cd_client = 0;
     }
@@ -408,17 +408,17 @@ void CmsScreen::handleEvent(XEvent *event) {
 }
 
 void CmsScreen::onCdDeviceAdded(CdClient *, CdDevice *device, CmsScreen *cs) {
-    GError *error;
+    GError *error = 0;
     if (!cd_device_connect_sync(device, 0, &error)) {
 	compWarning("cannot connect to colord device %s: %s",
-	    cd_device_get_object_path(device), error->message);
-	g_error_free(error);
+	    cd_device_get_object_path(device), error ? error->message : "(null)");
+	g_clear_error(&error);
 	return;
     }
 
     const char *name = cd_device_get_metadata_item(device, CD_DEVICE_METADATA_XRANDR_NAME);
     foreach (CmsOutput& output, cs->cmsOutputs) {
-	if (output.name == name) {
+	if (name != 0 && output.name == name) {
 	    g_object_ref(device);
 	    output.setDevice(device);
 	    return;
@@ -469,13 +469,15 @@ void CmsScreen::setupCdDevice(CmsOutput *output) {
 	cd_client, CD_DEVICE_METADATA_XRANDR_NAME, output->name.c_str(),
 	0, &error);
     if (!device) {
+	g_clear_error(&error);
 	return;
     }
 
     if (!cd_device_connect_sync(device, 0, &error)) {
 	compWarning("could not connect to colord device %s: %s",
-	    cd_device_get_object_path(device), error->message);
+	    cd_device_get_object_path(device), error ? error->message : "(null)");
 	g_object_unref(device);
+	g_clear_error(&error);
 	return;
     }
 
