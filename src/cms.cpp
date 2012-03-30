@@ -445,8 +445,6 @@ void CmsScreen::onCdDeviceRemoved(CdClient *, CdDevice *device, CmsScreen *cs) {
 }
 
 void CmsScreen::setupOutputs() {
-    if (!screen->XRandr()) return;
-
     XRRScreenResources *res =
 	XRRGetScreenResources(screen->dpy(), screen->root());
     if (!res) return;
