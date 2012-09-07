@@ -31,48 +31,7 @@
 #define compWarning(msg...) \
     compLogMessage("cms", CompLogLevelWarn, msg)
 
-using namespace GLFragment;
-
 COMPIZ_PLUGIN_20090315 (cms, CmsPluginVTable);
-
-CmsFunction::CmsFunction(int target, bool alpha, int param, int unit)
-        : id(0), alpha(alpha), target(target), param(param), unit(unit) {
-    FunctionData data;
-
-    if (alpha) {
-      data.addTempHeaderOp("temp");
-    }
-
-    data.addFetchOp("output", NULL, target);
-
-    if (alpha) {
-	data.addDataOp("MUL output.rgb, output.a, output;");
-	data.addDataOp("MUL temp.a, output.a, output.a;");
-    }
-
-    data.addDataOp("MAD output, output, program.env[%d], program.env[%d];", param, param + 1);
-
-    data.addDataOp("TEX output, output, texture[%d], 3D;", unit);
-
-    if (alpha) {
-	data.addDataOp("MUL output, temp.a, output;");
-    }
-
-    data.addColorOp("output", "output");
-
-    if (!data.status()) {
-	id = 0;
-    } else {
-	id = data.createFragmentFunction("cms");
-    }
-}
-
-CmsFunction::~CmsFunction() {
-    if (id) {
-	GL::deletePrograms(1, &id);
-	id = 0;
-    }
-}
 
 const int GRIDSIZE = 64;
 struct memlut {
@@ -126,6 +85,19 @@ CmsLut::~CmsLut() {
 	glDeleteTextures(1, &texture_id);
 	texture_id = 0;
     }
+}
+
+std::string CmsLut::getFragmentShader(bool alpha) {
+    float scale = (float) (GRIDSIZE - 1) / GRIDSIZE;
+    float offset = (float) 1.0 / (2 * GRIDSIZE);
+    std::ostringstream fs;
+    fs << "uniform sampler3D cms_lut;\n";
+    fs << "void cms_fragment() {\n";
+    fs << "  vec3 color = gl_FragColor.rgb * vec3("<<scale<<") + vec3("<<offset<<");\n";
+    fs << "  color = vec3(texture3D(cms_lut, color.rgb));\n";
+    fs << "  gl_FragColor = vec4(color, gl_FragColor.a);\n";
+    fs << "}\n";
+    return fs.str();
 }
 
 CmsLut *CmsLut::fromFile(const char *filename) {
@@ -493,20 +465,6 @@ bool CmsScreen::hasPerOutputProfiles() {
     return true;
 }
 
-GLuint CmsScreen::getFragmentFunction(int target, bool alpha, int param, int unit) {
-    foreach (CmsFunction& f, cmsFunctions) {
-	if (f.alpha == alpha && f.target == target && f.param == param && f.unit == unit) {
-	    return f.id;
-	}
-    }
-
-    CmsFunction *f = new CmsFunction(target, alpha, param, unit);
-
-    cmsFunctions.push_back(f);
-
-    return f->id;
-}
-
 CmsWindow::CmsWindow(CompWindow *window) :
 	PluginClassHandler<CmsWindow, CompWindow>(window),
 	window(window),
@@ -528,8 +486,8 @@ void CmsWindow::updateMatch() {
     cWindow->addDamage();
 }
 
-void CmsWindow::glDrawTexture(GLTexture *texture,
-	GLFragment::Attrib &attrib, unsigned mask) {
+void CmsWindow::glDrawTexture(GLTexture *texture, const GLMatrix &transform,
+	const GLWindowPaintAttrib &attrib, unsigned int mask) {
     CMS_SCREEN(screen);
 
     bool isDecoration = true;
@@ -553,38 +511,24 @@ void CmsWindow::glDrawTexture(GLTexture *texture,
 	}
     }
 
-    if (lut && doCms && GL::fragmentProgram) {
-	GLFragment::Attrib fa = attrib;
-
+    if (lut && doCms) {
 	bool alpha = isDecoration || window->alpha();
 
-	int target;
-	if (texture->target() == GL_TEXTURE_2D)
-	    target = COMP_FETCH_TARGET_2D;
-	else
-	    target = COMP_FETCH_TARGET_RECT;
+	// FIXME: Figure out a better way to allocate the texture unit.
+	int unit = 6; // > PrivateVertexBuffer::MAX_TEXTURES
 
-	int param = fa.allocParameters(2);
-	int unit = fa.allocTextureUnits(1);
-	GLuint function = cs->getFragmentFunction(target, alpha, param, unit);
-	fa.addFunction(function);
-
-	GLfloat scale = (GLfloat) (GRIDSIZE - 1) / GRIDSIZE;
-	GLfloat offset = (GLfloat) 1.0 / (2 * GRIDSIZE);
-
-	GL::programEnvParameter4f( GL_FRAGMENT_PROGRAM_ARB, param + 0,
-		scale, scale, scale, 1.0);
-	GL::programEnvParameter4f( GL_FRAGMENT_PROGRAM_ARB, param + 1,
-		offset, offset, offset, 0.0);
-
-	GL::activeTexture(GL_TEXTURE0_ARB + unit);
+	GL::activeTexture(GL_TEXTURE0 + unit);
 	glBindTexture(GL_TEXTURE_3D, lut->texture_id);
-	GL::activeTexture(GL_TEXTURE0_ARB);
+	GL::activeTexture(GL_TEXTURE0);
 
-	gWindow->glDrawTexture(texture, fa, mask);
+	std::string fragment_shader = lut->getFragmentShader(alpha);
+	gWindow->addShaders("cms", "", fragment_shader);
+	gWindow->vertexBuffer()->addUniform("cms_lut", unit);
+
+	gWindow->glDrawTexture(texture, transform, attrib, mask);
     } else {
 	/* no cms */
-	gWindow->glDrawTexture(texture, attrib, mask);
+	gWindow->glDrawTexture(texture, transform, attrib, mask);
     }
 }
 

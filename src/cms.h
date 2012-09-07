@@ -34,22 +34,13 @@
 
 #include "cms_options.h"
 
-struct CmsFunction {
-    CmsFunction(int target, bool alpha, int param, int unit);
-    ~CmsFunction();
-
-    GLFragment::FunctionId id;
-    bool alpha;
-    int target;
-    int param;
-    int unit;
-};
-
 struct CmsLut {
     CmsLut(cmsHPROFILE profile);
     ~CmsLut();
 
     GLuint texture_id;
+
+    std::string getFragmentShader(bool alpha);
 
     static CmsLut *fromFile(const char *filename);
     static CmsLut *fromMemory(unsigned char *icc, int len);
@@ -91,7 +82,6 @@ public:
 
     GLScreen *gScreen;
 
-    boost::ptr_vector<CmsFunction> cmsFunctions;
     boost::ptr_vector<CmsOutput> cmsOutputs;
 
     Atom _ICC_PROFILE;
@@ -108,8 +98,6 @@ public:
     void setupCdDevice(CmsOutput *output);
 
     bool hasPerOutputProfiles();
-
-    GLuint getFragmentFunction(int target, bool alpha, int param, int unit);
 };
 
 class CmsWindow :
@@ -129,7 +117,8 @@ public:
 
     void updateMatch();
 
-    void glDrawTexture(GLTexture *texture, GLFragment::Attrib &attrib, unsigned mask);
+    void glDrawTexture(GLTexture *texture, const GLMatrix &transform,
+	const GLWindowPaintAttrib &attrib, unsigned int mask);
 };
 
 #define CMS_SCREEN(s)							      \
