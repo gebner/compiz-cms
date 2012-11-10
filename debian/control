@@ -1,0 +1,15 @@
+Source: compiz-cms
+Section: gnome
+Priority: extra
+Maintainer: Gabriel Ebner <gebner@2b7e.org>
+Build-Depends: debhelper (>= 8.0.0), cmake, compiz-dev (>= 0.9.8), liblcms1-dev, libxrandr-dev, libcolord-dev
+Standards-Version: 3.9.3
+Homepage: https://github.com/gebner/compiz-cms
+Vcs-Git: https://github.com/gebner/compiz-cms.git
+Vcs-Browser: https://github.com/gebner/compiz-cms
+
+Package: compiz-cms
+Architecture: any
+Depends: compiz (>= 0.9.8), ${shlibs:Depends}, ${misc:Depends}
+Description: Full screen color management for compiz
+ Full screen color management for compiz
