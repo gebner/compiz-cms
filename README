@@ -4,14 +4,8 @@ Dependencies are only compiz, lcms and libcolord.  The ICC profile is retrieved
 using colord or the _ICC_PROFILE atom as set by gnome-color-manager.
 Compiz-style window exclusions are supported.
 
-This plugin is based on code from the compicc plugin by Kai-Uwe Behrmann:
-http://compicc.sf.net/
-
-To install:
-$ sudo apt-get install cmake compiz-dev liblcms1-dev libboost-serialization-dev libxrandr-dev libcolord-dev
-$ git clone https://github.com/gebner/compiz-cms.git
-$ mkdir compiz-cms/build
-$ cd compiz-cms/build
-$ cmake ..
-$ make install
+To install use my PPA: https://launchpad.net/~gebner/+archive/compiz-cms
+$ sudo add-apt-repository ppa:gebner/compiz-cms
+$ sudo apt-get update
+$ sudo apt-get install compiz-cms
 And enable in CCSM.
