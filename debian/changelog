@@ -1,3 +1,9 @@
+compiz-cms (0.3-6) quantal; urgency=low
+
+  * Add build dependency on libboost-dev.
+
+ -- Gabriel Ebner <gebner@2b7e.org>  Sun, 11 Nov 2012 15:43:56 +0100
+
 compiz-cms (0.3-5) quantal; urgency=low
 
   * Add build dependency on xsltproc.
