@@ -1,5 +1,5 @@
-compiz-cms (0.3-2) unstable; urgency=low
+compiz-cms (0.3-3) quantal; urgency=low
 
   * Initial release.
 
- -- Gabriel Ebner <gebner@2b7e.org>  Sat, 10 Nov 2012 17:25:14 +0100
+ -- Gabriel Ebner <gebner@2b7e.org>  Sun, 11 Nov 2012 14:35:02 +0100
