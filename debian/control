@@ -10,6 +10,6 @@ Vcs-Browser: https://github.com/gebner/compiz-cms
 
 Package: compiz-cms
 Architecture: any
-Depends: compiz (>= 0.9.8), compiz-plugins-default (= 1:0.9.8.4+bzr3407-0ubuntu2), ${shlibs:Depends}, ${misc:Depends}
+Depends: compiz (>= 0.9.8), compiz-plugins-default (= 1:0.9.8.4+bzr3407-0ubuntu3), ${shlibs:Depends}, ${misc:Depends}
 Description: Full screen color management for compiz
  Full screen color management for compiz

@@ -1,3 +1,9 @@
+compiz-cms (0.3-4) quantal; urgency=low
+
+  *  Fix dependency on compiz.
+
+ -- Gabriel Ebner <gebner@2b7e.org>  Sun, 11 Nov 2012 15:00:40 +0100
+
 compiz-cms (0.3-3) quantal; urgency=low
 
   * Initial release.
