@@ -1,3 +1,9 @@
+compiz-cms (0.3-6ubuntu3) raring; urgency=low
+
+  * Remove versioned dependency on compiz.
+
+ -- Gabriel Ebner <gebner@2b7e.org>  Fri, 26 Apr 2013 12:35:20 +0200
+
 compiz-cms (0.3-6ubuntu2) raring; urgency=low
 
   * Bump dependency on compiz.
