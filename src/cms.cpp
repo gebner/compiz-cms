@@ -46,9 +46,9 @@ CmsLut::CmsLut(cmsHPROFILE monitorProfile) : texture_id(0) {
     for (int r = 0; r < GRIDSIZE; r++) {
 	for (int g = 0; g < GRIDSIZE; g++) {
 	    for (int b = 0; b < GRIDSIZE; b++) {
-		in->a[b][g][r][0] = ((0xffff-1)*r)/GRIDSIZE;
-		in->a[b][g][r][1] = ((0xffff-1)*g)/GRIDSIZE;
-		in->a[b][g][r][2] = ((0xffff-1)*b)/GRIDSIZE;
+		in->a[b][g][r][0] = floor((double) r / (GRIDSIZE - 1) * 65535.0 + 0.5);
+		in->a[b][g][r][1] = floor((double) g / (GRIDSIZE - 1) * 65535.0 + 0.5);
+		in->a[b][g][r][2] = floor((double) b / (GRIDSIZE - 1) * 65535.0 + 0.5);
 	    }
 	}
     }

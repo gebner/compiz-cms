@@ -1,3 +1,9 @@
+compiz-cms (0.3.1) raring; urgency=low
+
+  * Fix grid calculation inaccuracy.
+
+ -- Gabriel Ebner <gebner@gebner.org>  Sun, 16 Jun 2013 21:53:08 +0200
+
 compiz-cms (0.3-6ubuntu3) raring; urgency=low
 
   * Remove versioned dependency on compiz.
