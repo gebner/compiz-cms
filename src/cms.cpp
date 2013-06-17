@@ -95,6 +95,13 @@ std::string CmsLut::getFragmentShader(bool alpha) {
     fs << "void cms_fragment() {\n";
     fs << "  vec3 color = gl_FragColor.rgb * vec3("<<scale<<") + vec3("<<offset<<");\n";
     fs << "  color = vec3(texture3D(cms_lut, color.rgb));\n";
+    // The display profile is only valid for rgb values that are actually sent
+    // to the display.  If alpha < 1, then we are correcting rgb values that
+    // are never shown on the screen -- this results in a greenish tint in
+    // shadow effects on my monitor.
+    // So we do a simple linear interpolation here, giving the corrected values
+    // if alpha = 1, and the uncorrected values if alpha = 0.
+    fs << "  color = gl_FragColor.a * color + (1-gl_FragColor.a) * gl_FragColor.rgb;\n";
     fs << "  gl_FragColor = vec4(color, gl_FragColor.a);\n";
     fs << "}\n";
     return fs.str();
