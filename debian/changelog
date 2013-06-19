@@ -1,3 +1,9 @@
+compiz-cms (0.3.2) raring; urgency=low
+
+  * Improve alpha handling.
+
+ -- Gabriel Ebner <gebner@gebner.org>  Wed, 19 Jun 2013 18:44:39 +0200
+
 compiz-cms (0.3.1) raring; urgency=low
 
   * Fix grid calculation inaccuracy.
