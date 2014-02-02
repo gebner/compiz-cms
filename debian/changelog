@@ -1,3 +1,9 @@
+compiz-cms (0.3.2ubuntu1) saucy; urgency=low
+
+  * Release for saucy.
+
+ -- Gabriel Ebner <gebner@gebner.org>  Sun, 02 Feb 2014 21:36:55 +0100
+
 compiz-cms (0.3.2) raring; urgency=low
 
   * Improve alpha handling.
