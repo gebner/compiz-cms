@@ -1,3 +1,10 @@
+compiz-cms (0.4) saucy; urgency=low
+
+  * Support Mesa3d drivers.
+  * Use asynchronous libcolord interface.
+
+ -- Gabriel Ebner <gebner@gebner.org>  Thu, 06 Feb 2014 12:28:25 +0100
+
 compiz-cms (0.3.2ubuntu1) saucy; urgency=low
 
   * Release for saucy.
