@@ -88,14 +88,17 @@ public:
     int randrEvent, randrError;
 
     CdClient *cd_client;
+    static void onCdConnectFinish(CdClient *, GAsyncResult *, CmsScreen *);
+    template <bool unrefAfterUse> void connectToDevice(CdDevice *);
     static void onCdDeviceAdded(CdClient *, CdDevice *, CmsScreen *);
     static void onCdDeviceRemoved(CdClient *, CdDevice *, CmsScreen *);
+    template <bool unrefAfterUse> static void onCdDeviceConnectFinish(CdDevice *, GAsyncResult *, CmsScreen *);
+    static void onCdClientFindDeviceByPropertyFinish(CdClient *, GAsyncResult *, CmsScreen *);
 
     void optionChanged(CompOption *opt, CmsOptions::Options num);
     void handleEvent(XEvent *event);
 
     void setupOutputs();
-    void setupCdDevice(CmsOutput *output);
 
     bool hasPerOutputProfiles();
 };

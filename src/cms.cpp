@@ -314,21 +314,33 @@ CmsScreen::CmsScreen(CompScreen *screen) :
 	RROutputPropertyNotifyMask | RROutputChangeNotifyMask);
     screen->handleEventSetEnabled(this, true);
 
-    GError *error = 0;
     cd_client = cd_client_new();
-    if (!cd_client_connect_sync(cd_client, 0, &error)) {
-	compWarning("cannot connect to colord: %s", error ? error->message : "(null)");
-	g_clear_error(&error);
-	g_object_unref(cd_client);
-	cd_client = 0;
-    }
-
-    if (cd_client) {
-	g_signal_connect(cd_client, "device-added", G_CALLBACK(onCdDeviceAdded), this);
-	g_signal_connect(cd_client, "device-removed", G_CALLBACK(onCdDeviceRemoved), this);
-    }
+    cd_client_connect(cd_client, 0, (GAsyncReadyCallback) onCdConnectFinish, this);
 
     setupOutputs();
+}
+
+void CmsScreen::onCdConnectFinish(CdClient *, GAsyncResult *res, CmsScreen *cs) {
+    GError *error = 0;
+    if (!cd_client_connect_finish(cs->cd_client, res, &error)) {
+	compWarning("cannot connect to colord: %s", error ? error->message : "(null)");
+	g_clear_error(&error);
+	g_object_unref(cs->cd_client);
+	cs->cd_client = 0;
+    }
+
+    if (cs->cd_client) {
+	g_signal_connect(cs->cd_client, "device-added", G_CALLBACK(onCdDeviceAdded), cs);
+	g_signal_connect(cs->cd_client, "device-removed", G_CALLBACK(onCdDeviceRemoved), cs);
+    }
+
+    foreach (CmsOutput& output, cs->cmsOutputs) {
+        if (!output.connected) return;
+
+        cd_client_find_device_by_property(
+            cs->cd_client, CD_DEVICE_METADATA_XRANDR_NAME, output.name.c_str(),
+            0, (GAsyncReadyCallback) onCdClientFindDeviceByPropertyFinish, cs);
+    }
 }
 
 CmsScreen::~CmsScreen() {
@@ -386,9 +398,19 @@ void CmsScreen::handleEvent(XEvent *event) {
     }
 }
 
+template <bool unrefAfterUse>
+void CmsScreen::connectToDevice(CdDevice *device) {
+    cd_device_connect(device, 0, (GAsyncReadyCallback) onCdDeviceConnectFinish<unrefAfterUse>, this);
+}
+
 void CmsScreen::onCdDeviceAdded(CdClient *, CdDevice *device, CmsScreen *cs) {
+    cs->connectToDevice<false>(device);
+}
+
+template <bool unrefAfterUse>
+void CmsScreen::onCdDeviceConnectFinish(CdDevice *device, GAsyncResult *res, CmsScreen *cs) {
     GError *error = 0;
-    if (!cd_device_connect_sync(device, 0, &error)) {
+    if (!cd_device_connect_finish(device, res, &error)) {
 	compWarning("cannot connect to colord device %s: %s",
 	    cd_device_get_object_path(device), error ? error->message : "(null)");
 	g_clear_error(&error);
@@ -406,6 +428,10 @@ void CmsScreen::onCdDeviceAdded(CdClient *, CdDevice *device, CmsScreen *cs) {
 
     compWarning("could not find output for colord device: %s",
 	cd_device_get_object_path(device));
+
+    if (unrefAfterUse) {
+        g_object_unref(device);
+    }
 }
 
 void CmsScreen::onCdDeviceRemoved(CdClient *, CdDevice *device, CmsScreen *cs) {
@@ -430,7 +456,6 @@ void CmsScreen::setupOutputs() {
 
     for (int i = 0; i < res->noutput; i++) {
 	CmsOutput *output = new CmsOutput(screen, res->outputs[i]);
-	setupCdDevice(output);
 	output->updateLUT();
 	cmsOutputs.push_back(output);
     }
@@ -438,29 +463,16 @@ void CmsScreen::setupOutputs() {
     XRRFreeScreenResources(res);
 }
 
-void CmsScreen::setupCdDevice(CmsOutput *output) {
-    if (!cd_client) return;
-
-    if (!output->connected) return;
-
+void CmsScreen::onCdClientFindDeviceByPropertyFinish(CdClient *client,
+        GAsyncResult *res, CmsScreen *cs) {
     GError *error = 0;
-    CdDevice *device = cd_client_find_device_by_property_sync(
-	cd_client, CD_DEVICE_METADATA_XRANDR_NAME, output->name.c_str(),
-	0, &error);
+    CdDevice *device = cd_client_find_device_by_property_finish(client, res, &error);
     if (!device) {
 	g_clear_error(&error);
 	return;
     }
 
-    if (!cd_device_connect_sync(device, 0, &error)) {
-	compWarning("could not connect to colord device %s: %s",
-	    cd_device_get_object_path(device), error ? error->message : "(null)");
-	g_object_unref(device);
-	g_clear_error(&error);
-	return;
-    }
-
-    output->setDevice(device);
+    cs->connectToDevice<true>(device);
 }
 
 bool CmsScreen::hasPerOutputProfiles() {
