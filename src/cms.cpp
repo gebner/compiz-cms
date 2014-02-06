@@ -101,7 +101,7 @@ std::string CmsLut::getFragmentShader(bool alpha) {
     // shadow effects on my monitor.
     // So we do a simple linear interpolation here, giving the corrected values
     // if alpha = 1, and the uncorrected values if alpha = 0.
-    fs << "  color = gl_FragColor.a * color + (1-gl_FragColor.a) * gl_FragColor.rgb;\n";
+    fs << "  color = gl_FragColor.a * color + (1.0-gl_FragColor.a) * gl_FragColor.rgb;\n";
     fs << "  gl_FragColor = vec4(color, gl_FragColor.a);\n";
     fs << "}\n";
     return fs.str();
