@@ -1,3 +1,9 @@
+compiz-cms (0.5ubuntu1) utopic; urgency=medium
+
+  * Also build PPA for utopic.
+
+ -- Gabriel Ebner <gebner@gebner.org>  Sat, 14 Jun 2014 13:54:07 +0200
+
 compiz-cms (0.5) saucy; urgency=medium
 
   * Fix multi-monitor support.
