@@ -335,7 +335,7 @@ void CmsScreen::onCdConnectFinish(CdClient *, GAsyncResult *res, CmsScreen *cs) 
     }
 
     foreach (CmsOutput& output, cs->cmsOutputs) {
-        if (!output.connected) return;
+        if (!output.connected) continue;
 
         cd_client_find_device_by_property(
             cs->cd_client, CD_DEVICE_METADATA_XRANDR_NAME, output.name.c_str(),
