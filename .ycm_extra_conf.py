@@ -5,8 +5,8 @@ import ycm_core
 # compilation database set (by default, one is not set).
 # CHANGE THIS LIST OF FLAGS. YES, THIS IS THE DROID YOU HAVE BEEN LOOKING FOR.
 flags = [
-'-std=c++11',
-'-x', 'c++',
+'-xc++',
+'-std=c++11', '-stdlib=libc++',
 ]
 
 
@@ -84,7 +84,7 @@ def FlagsForFile( filename, **kwargs ):
       return None
 
     final_flags = MakeRelativePathsInFlagsAbsolute(
-      compilation_info.compiler_flags_,
+      flags + list(compilation_info.compiler_flags_),
       compilation_info.compiler_working_dir_ )
 
   else:
