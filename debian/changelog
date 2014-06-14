@@ -1,3 +1,9 @@
+compiz-cms (0.5) saucy; urgency=medium
+
+  * Fix multi-monitor support.
+
+ -- Gabriel Ebner <gebner@gebner.org>  Sat, 14 Jun 2014 13:33:01 +0200
+
 compiz-cms (0.4) saucy; urgency=low
 
   * Support Mesa3d drivers.
