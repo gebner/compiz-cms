@@ -188,6 +188,8 @@ void CmsOutput::updateLUT() {
 
     // fetch ICC profile from colord
     char *filename = getColordProfileFilename();
+    compWarning("updateLUT: %s for %s", filename, name.c_str());
+    compWarning("%s: %i %i %i %i", name.c_str(), rect.x1(), rect.y1(), rect.width(), rect.height());
     if (filename) {
 	newLut = CmsLut::fromFile(filename);
 	free(filename);
@@ -255,6 +257,8 @@ void CmsOutput::setDevice(CdDevice *d) {
     if (device) {
 	onDeviceChangeId = g_signal_connect(device, "changed", G_CALLBACK(onDeviceChange), this);
     }
+
+    updateLUT();
 }
 
 void CmsOutput::onDeviceChange(CdDevice *dev, CmsOutput *out) {
@@ -335,6 +339,7 @@ void CmsScreen::onCdConnectFinish(CdClient *, GAsyncResult *res, CmsScreen *cs) 
     }
 
     foreach (CmsOutput& output, cs->cmsOutputs) {
+        compWarning("colord-connecting to output %s, connected=%i", output.name.c_str(), output.connected);
         if (!output.connected) continue;
 
         cd_client_find_device_by_property(
@@ -400,6 +405,7 @@ void CmsScreen::handleEvent(XEvent *event) {
 
 template <bool unrefAfterUse>
 void CmsScreen::connectToDevice(CdDevice *device) {
+    compWarning("connectToDevice %s", cd_device_get_metadata_item(device, CD_DEVICE_METADATA_XRANDR_NAME));
     cd_device_connect(device, 0, (GAsyncReadyCallback) onCdDeviceConnectFinish<unrefAfterUse>, this);
 }
 
@@ -416,6 +422,8 @@ void CmsScreen::onCdDeviceConnectFinish(CdDevice *device, GAsyncResult *res, Cms
 	g_clear_error(&error);
 	return;
     }
+
+    compWarning("onCdDeviceConnectFinish %s %s", cd_device_get_object_path(device), cd_device_get_metadata_item(device, CD_DEVICE_METADATA_XRANDR_NAME));
 
     const char *name = cd_device_get_metadata_item(device, CD_DEVICE_METADATA_XRANDR_NAME);
     foreach (CmsOutput& output, cs->cmsOutputs) {
@@ -453,6 +461,8 @@ void CmsScreen::setupOutputs() {
     XRRScreenResources *res =
 	XRRGetScreenResources(screen->dpy(), screen->root());
     if (!res) return;
+
+    compWarning("no of outputs: %i", res->noutput);
 
     for (int i = 0; i < res->noutput; i++) {
 	CmsOutput *output = new CmsOutput(screen, res->outputs[i]);
@@ -525,7 +535,7 @@ void CmsWindow::glDrawTexture(GLTexture *texture, const GLMatrix &transform,
 	foreach (CmsOutput& out, cs->cmsOutputs) {
 	    if (borderRect.intersects(out.rect) && out.lut) {
 		lut = out.lut;
-		break;
+		//break;
 	    }
 	}
     }
